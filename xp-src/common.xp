@@ -1,0 +1,106 @@
+/*  filz - a model checked I2C specification 
+ *  copyright (c) 2021, ETH Zurich, Systems Group
+ *
+ *  this program is free software: you can redistribute it and/or modify
+ *  it under the terms of the gnu general public license as published by
+ *  the free software foundation, either version 3 of the license, or
+ *  (at your option) any later version.
+ *
+ *  this program is distributed in the hope that it will be useful,
+ *  but without any warranty; without even the implied warranty of
+ *  merchantability or fitness for a particular purpose.  see the
+ *  gnu general public license for more details.
+ *
+ *  you should have received a copy of the gnu general public license
+ *  along with this program.  if not, see <https://www.gnu.org/licenses/>.
+ */
+
+
+#define BYTE_RES_OK    1
+#define BYTE_RES_ACK   2
+#define BYTE_RES_NACK  3
+#define BYTE_RES_READ  4
+#define BYTE_RES_START 5
+#define BYTE_RES_STOP  6
+#define BYTE_RES_IDLE  7
+#define BYTE_RES_ARB_LOSS  8
+
+#define BYTE_ACT_START  11
+#define BYTE_ACT_STOP   12
+#define BYTE_ACT_WRITE  13
+#define BYTE_ACT_READ   14
+#define BYTE_ACT_ACK    15
+#define BYTE_ACT_NACK   16
+#define BYTE_ACT_IDLE   17
+
+#define SYM_START 23
+#define SYM_STOP  24
+#define SYM_BIT0  25
+#define SYM_BIT1  26
+#define SYM_IDLE  27
+#define SYM_STRETCH  28
+
+#define RES_OK 1
+#define RES_FAIL 2
+
+
+/* Transaction master defines */
+#define TR_RES_OK 1
+#define TR_RES_FAIL 2
+#define TR_RES_NACK 3
+
+#define TR_ACT_WRITE 1
+#define TR_ACT_READ 2
+#define TR_ACT_STOP 3
+#define TR_ACT_IDLE 4
+
+/* expecting eeprom at this addr */
+#define EEPROM_ADDR 80
+
+/* TransactionSlave listens for this address */
+#define SLAVE_ADDR 80 
+
+#define HLS_RES_IDLE 0
+#define HLS_RES_READ 1    /* Address match and read (from master) requested */
+#define HLS_RES_WRITE 2   /* Address match and write (from master) requested */
+#define HLS_RES_START 3
+#define HLS_RES_STOP 4
+#define HLS_RES_ACK 5
+
+#define HLS_ACT_IDLE 7
+#define HLS_ACT_ACK 9
+#define HLS_ACT_NACK 10
+#define HLS_ACT_WRITE 11 
+
+// EepMaster
+#define ME_RES_IDLE 0
+#define ME_RES_OK 1
+#define ME_RES_FAIL 2
+
+#define ME_ACT_WRITE_EEPROM 0
+#define ME_ACT_READ_EEPROM 1
+
+
+// EepSlave
+#define SE_RES_WRITE 1
+#define SE_RES_READ 2
+
+#define SE_ACT_OK 0
+
+
+// Useful for dealing with arrays
+
+#define INTARR_LEN 16
+
+#define ARR_NEQ(a,b)   (a.arr[ 0] != b.arr[ 0] ||     a.arr[ 1]  != b.arr[ 1] ||     a.arr[ 2]  != b.arr[ 2] ||     a.arr[ 3]  != b.arr[ 3] ||     a.arr[ 4]  != b.arr[ 4] ||     a.arr[ 5]  != b.arr[ 5] ||     a.arr[ 6]  != b.arr[ 6] ||     a.arr[ 7]  != b.arr[ 7] ||     a.arr[ 8]  != b.arr[ 8] ||     a.arr[ 9]  != b.arr[ 9] ||     a.arr[10]  != b.arr[10] ||     a.arr[11]  != b.arr[11] ||     a.arr[12]  != b.arr[12] ||     a.arr[13]  != b.arr[13] ||     a.arr[14]  != b.arr[14] ||     a.arr[15]  != b.arr[15])
+
+#define ARR_EQ(a,b)   (!ARR_NEQ(a,b))
+
+#define ARR_DONT_CARE _,_,_,_,_,_,_,_,_,_,_,_,_,_,_,_
+
+#define ARR_ASSIGN(a,b) atomic { a.arr[0] = b.arr[0]; a.arr[1] = b.arr[1]; a.arr[2] = b.arr[2]; a.arr[3] = b.arr[3]; a.arr[4] = b.arr[4]; a.arr[5] = b.arr[5]; a.arr[6] = b.arr[6]; a.arr[7] = b.arr[7]; a.arr[8] = b.arr[8]; a.arr[9] = b.arr[9]; a.arr[10] = b.arr[10]; a.arr[11] = b.arr[11]; a.arr[12] = b.arr[12]; a.arr[13] = b.arr[13]; a.arr[14] = b.arr[14]; }
+
+#define ARR_PRINT(x) printf("[0]=%d,[1]=%d,[2]=%d,[3]=%d,[4]=%d,[5]=%d,[6]=%d,[7]=%d,[8]=%d,[9]=%d,[10]=%d,[11]=%d,[12]=%d,[13]=%d,[14]=%d,[15]=%d\n", x.arr[0],x.arr[1],x.arr[2],x.arr[3],x.arr[4],x.arr[5],x.arr[6],x.arr[7],x.arr[8],x.arr[9],x.arr[10],x.arr[11],x.arr[12],x.arr[13],x.arr[14],x.arr[15]);
+
+
+#define ARR_SET_NULL(a) atomic {a.arr[ 0] = 0;a.arr[ 1] = 0;a.arr[ 2] = 0;a.arr[ 3] = 0;a.arr[ 4] = 0;a.arr[ 5] = 0;a.arr[ 6] = 0;a.arr[ 7] = 0;a.arr[ 8] = 0;a.arr[ 9] = 0;a.arr[10] = 0;a.arr[11] = 0;a.arr[12] = 0;a.arr[13] = 0;a.arr[14] = 0;}

@@ -1,0 +1,90 @@
+/*  filz - a model checked i2c specification 
+ *  copyright (c) 2021, ETH Zurich, Systems Group
+ *
+ *  this program is free software: you can redistribute it and/or modify
+ *  it under the terms of the gnu general public license as published by
+ *  the free software foundation, either version 3 of the license, or
+ *  (at your option) any later version.
+ *
+ *  this program is distributed in the hope that it will be useful,
+ *  but without any warranty; without even the implied warranty of
+ *  merchantability or fitness for a particular purpose.  see the
+ *  gnu general public license for more details.
+ *
+ *  you should have received a copy of the gnu general public license
+ *  along with this program.  if not, see <https://www.gnu.org/licenses/>.
+ */
+
+#define RES_ACK 0
+#define RES_NACK 1
+
+#define ACT_ACK 0
+#define ACT_NACK 1
+
+proc (int) NibbleController(int res) {
+start: // Just some sample data
+    yield (1);
+    assert(res == RES_ACK);
+    yield (15);
+    assert(res == RES_ACK);
+    yield (13);
+    assert(res == RES_ACK);
+goto start;
+}
+
+
+//<BUSCONTROLLER>
+proc (int) BusController(int res) {
+    int data; int data_pos; int nibble_res;
+    nibble_res = RES_ACK;
+start:
+    data = NibbleController(nibble_res);
+    data_pos = 0; 
+    while(data_pos < 4){
+        yield ((data >> (3-data_pos)) & 1);  //MSB first
+        data_pos = data_pos + 1;     }
+    yield (1);   // this reads back the ACK bit
+    if(res == 0) {
+        nibble_res = RES_ACK; goto start;
+    } else {
+        nibble_res = RES_NACK; goto start;    }
+}
+//</BUSCONTROLLER>
+
+proc (int) NibbleResponder(int res) {
+start:
+    yield (ACT_ACK); // always ACK
+    goto start;
+}
+
+//<BUSRESPONDER>
+proc (int) BusResponder(int res) {
+    int buf; int read; int ack;
+start:
+    buf = 0; read = 0;
+    while(read < 4){
+        yield (1);
+        assert(res == 0 or res == 1);
+        buf = (buf << 1) | res;
+        read = read + 1;    }
+    (ack) = NibbleResponder(buf);
+    yield (ack); goto start;
+}
+//</BUSRESPONDER>
+
+proc () El() {
+    int res;
+    int out1;
+    int out2;
+
+    res = 1;
+loop:
+    out1 = BusController(res);
+    out2 = BusResponder(res);
+    if(out1 == 0 or out2 == 0) {
+        res = 0;
+    } else {
+        res = 1;
+    }
+    goto loop;
+}
