@@ -42,7 +42,7 @@ On Ubuntu 20.04 the following packages should be installed:
 ```
 apt-get install ghc libghc-megaparsec-dev spin build-essential clang-format \
     libghc-missingh-dev libghc-pretty-simple-dev libghc-extra-dev libghc-lens-dev
-```.
+```
 
 
 Make
