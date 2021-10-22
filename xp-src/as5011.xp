@@ -1,0 +1,134 @@
+#include "i2c.xp"
+
+proc (int, int) TrAsResponder<int resp_addr>(int res, int res_data) {
+	int read_request;
+	int reg_index;
+
+	assert(res == BYTE_RES_IDLE);
+	yield (BYTE_ACT_IDLE, 0);
+
+start:
+	if(res == BYTE_RES_IDLE) {
+		yield (BYTE_ACT_IDLE, 0);
+		goto start;
+	}
+	assert(res == BYTE_RES_START);
+
+    yield (BYTE_ACT_READ, 0);
+	assert(res == BYTE_RES_READ);
+
+	if( (res_data >> 1) == resp_addr ){
+		read_request = res_data & 1;
+		yield (BYTE_ACT_ACK,0);
+		assert(res == BYTE_RES_ACK);
+        // Now we read a byte, no matter R/W
+		goto read_reg_index;
+	} else {
+		yield (BYTE_ACT_NACK,0);
+		goto start;
+	}
+
+read_reg_index:
+    yield (BYTE_ACT_READ,0);
+	assert(res == BYTE_RES_READ);
+    reg_index = res_data;
+    yield (BYTE_ACT_ACK,0);
+    if(read_request == 1){
+        res = call(HLS_REG_READ,reg_index,0);
+        yield (BYTE_ACT_WRITE,res);
+	    assert(res == BYTE_RES_NACK);
+    } else {
+        yield (BYTE_ACT_READ,0);
+	    assert(res == BYTE_RES_READ);
+        res = call(HLS_ACT_WRITE,reg_index,res_data);
+        yield (BYTE_ACT_NACK,0);
+	    assert(res == BYTE_RES_NACK);
+    }
+    // Expect stop
+    yield (BYTE_ACT_IDLE,0);
+    assert(res == BYTE_RES_STOP);
+    yield (BYTE_ACT_IDLE,0);
+    goto start;
+}
+
+proc (int,int) TrAsController<int ctrl_addr>(int res, int res_data) {
+    int act; int reg_idx; int reg_data; int hls_res;
+    hls_res = RES_OK;
+
+start:
+    (act, reg_idx, reg_data) = call(hls_res); //HlsAsController
+    if(act == HLS_ACT_WRITE) {
+       yield (BYTE_ACT_START,0);
+       assert(res==BYTE_RES_START);
+       yield (BYTE_ACT_WRITE,ctrl_addr << 1); // I2C Address, read flag not set
+       assert(res==BYTE_RES_ACK);
+       yield (BYTE_ACT_WRITE,reg_idx); // Reg address
+       assert(res==BYTE_RES_ACK);
+       yield (BYTE_ACT_WRITE,reg_data); // Reg content
+       assert(res==BYTE_RES_NACK);
+       yield (BYTE_ACT_STOP,0);
+       hls_res = RES_OK;
+       goto start;
+    }
+    if(act == HLS_ACT_READ) {
+       yield (BYTE_ACT_START,0);
+       assert(res==BYTE_RES_START);
+       yield (BYTE_ACT_WRITE,(ctrl_addr << 1) | 1); // I2C Address, read flag set
+       assert(res==BYTE_RES_ACK);
+       yield (BYTE_ACT_WRITE,reg_idx); // Reg address
+       assert(res==BYTE_RES_ACK);
+       yield (BYTE_ACT_READ,0); // Reg content
+       assert(res==BYTE_RES_READ);
+       hls_res = res_data;
+       yield (BYTE_ACT_NACK,0);
+       assert(res==BYTE_RES_NACK);
+       yield (BYTE_ACT_STOP,0);
+       assert(res==BYTE_RES_STOP);
+       goto start;
+    }
+}
+
+proc (int,int,int) HlsAsController(int res){
+start:
+    yield(HLS_ACT_WRITE, 1, 2);
+    yield(HLS_ACT_READ, 1, 0);
+    goto start;
+}
+
+proc (int) HlsAsResponder(int action, int reg_index, int reg_data){
+    /*
+     * Dummy Implementation
+     */
+    if(action == HLS_REG_READ){
+        if(reg_index == 0){
+            yield (10);
+        }
+        if(reg_index == 1){
+            yield (11);
+        }
+        yield(20);
+    } 
+
+    if(action == HLS_REG_WRITE){
+        yield(0);
+    }
+}
+
+system {
+    layers [Sym, Byte, Tr, Hls];
+
+    device controller {
+        Sym : SymController;
+        Byte : ByteCommon;
+        Tr : TrAsController<AS5011_ADDR>;
+        Hls : HlsAsController;
+    };
+
+    device responder {
+        Sym : SymResponder;
+        Byte : ByteCommon; 
+        Tr : TrAsResponder<AS5011_ADDR>;
+
+        Hls : HlsAsResponder;
+    };
+}

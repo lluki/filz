@@ -1,23 +1,8 @@
-/*  filz - a model checked I2C specification 
- *  copyright (c) 2021, ETH Zurich, Systems Group
- *
- *  this program is free software: you can redistribute it and/or modify
- *  it under the terms of the gnu general public license as published by
- *  the free software foundation, either version 3 of the license, or
- *  (at your option) any later version.
- *
- *  this program is distributed in the hope that it will be useful,
- *  but without any warranty; without even the implied warranty of
- *  merchantability or fitness for a particular purpose.  see the
- *  gnu general public license for more details.
- *
- *  you should have received a copy of the gnu general public license
- *  along with this program.  if not, see <https://www.gnu.org/licenses/>.
- */
-
 /*
  * Shows the equivalence of Byte+Symbol+El and ByteAbs
  */
+#include "common.xp"
+#include "eep.pml"
 #include "i2c-spec.pml"
 
 #if ABS_LEVEL >= 2
@@ -26,7 +11,7 @@
 
 
 init {
-    run ByteRun();
+    ByteRun();
     run verifier();
 }
 
@@ -47,10 +32,10 @@ proctype verifier() {
 
 
     /* the concrete channels, hard-named in i2c.pml */
-    #define conc_m_out TransactionMaster_in
-    #define conc_m_in  TransactionMaster_out
-    #define conc_s_out TransactionSlave_in
-    #define conc_s_in  TransactionSlave_out
+    #define conc_m_out controller_Tr_in
+    #define conc_m_in  controller_Tr_out
+    #define conc_s_out responder_Tr_in
+    #define conc_s_in  responder_Tr_out
 
 
     run TransactionValid(transm_in, transm_out, transs_in, transs_out);

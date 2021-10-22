@@ -39,9 +39,18 @@ char * fmt_sym(int sym){
     }
 }
 
-void ByteMaster(int sym, int *out){
+static int ns=0;
+const int syms[] =
+    {SYM_START, SYM_BIT0, SYM_BIT1, SYM_START, SYM_BIT1,
+      SYM_BIT0, SYM_STOP};
+
+void controller_Byte(int sym, int *out){
     printf("%s recv --> ", fmt_sym(sym));
-    ByteMasterStub(sym, out);
+    if(ns < sizeof(syms)/sizeof(syms[0])){
+        *out = syms[ns++];
+    } else {
+        *out = SYM_IDLE;
+    }
     printf("%s\n", fmt_sym(*out));
 }
 
@@ -49,7 +58,7 @@ int main() {
     printf("SCL:SDA\n");
     int scl=1, sda=1;
     for(int i=0;i<100;i++){
-        MasterDriver(scl, sda, &scl, &sda);
+        controller_Sym(scl, sda, &scl, &sda);
         printf("%d:%d\n",scl,sda);
     }
 }

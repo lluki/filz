@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable #-}
 {-
  - filz - a model checked I2C specification                                                                        
  - copyright (c) 2021, ETH Zurich, Systems Group        
@@ -16,10 +17,11 @@
  - along with this program.  if not, see <https://www.gnu.org/licenses/>.                                          
  -}
 
-{-# LANGUAGE DeriveFoldable, DeriveFunctor, DeriveTraversable #-}
-
 {-
- - The core AST Definition, with Proc only
+ - The core AST Definition, it knows only about Procs, and Procs
+ - are instances.
+ - These procs should be properly instanciated, that is if 
+ - they do a call
  -}
 
 module CoreAST where
@@ -27,7 +29,9 @@ module CoreAST where
 import Data.Functor
 import Data.Traversable
 
+import Control.Applicative
 import Control.Monad.State
+import Control.Lens
 
 data VarRef = Var String
             | ArrVar String AExpr
@@ -75,15 +79,46 @@ data BExpr
   deriving (Eq, Ord, Show)
 
 
+aLeaves :: Traversal' AExpr AExpr
+aLeaves f (Add a1 a2) = (Add <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f (Sub a1 a2) = (Sub <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f (Mul a1 a2) = (Mul <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f (Div a1 a2) = (Div <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f (Neg a1) = Neg <$> aLeaves f a1
+aLeaves f (BitAnd a1 a2) = (BitAnd <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f (BitOr a1 a2) = (BitOr <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f (RShift a1 a2) = (RShift <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f (LShift a1 a2) = (LShift <$> aLeaves f a1) <*> aLeaves f a2
+aLeaves f x = f x
+
+bAexprs :: Traversal' BExpr AExpr
+bAexprs f (Le a1 a2)   = (Le <$> f a1) <*> f a2
+bAexprs f (Leq a1 a2)  = (Leq <$> f a1) <*> f a2
+bAexprs f (Ge a1 a2)   = (Ge <$> f a1) <*> f a2
+bAexprs f (Geq a1 a2)  = (Geq <$> f a1) <*> f a2
+bAexprs f (Eq a1 a2)   = (Eq <$> f a1) <*> f a2
+bAexprs f (Neq a1 a2)  = (Neq <$> f a1) <*> f a2
+bAexprs f (And b1 b2)  = (And <$> bAexprs f b1) <*> bAexprs f b2
+bAexprs f (Or b1 b2)  = (Or <$> bAexprs f b1) <*> bAexprs f b2
+bAexprs f x = pure x
+
+
+-- Block
 data IBlock meta = IBlock [Instr meta]
-    deriving (Show, Functor, Foldable, Traversable)
+    deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+ibAexprs :: Traversal' (IBlock meta) AExpr
+ibAexprs f (IBlock is) = IBlock <$> (sequenceA $ map (iAexprs f) is)
 
 -- default meta type
 type IMeta = Int
 
 
--- an instruction
-data Instr meta = IYield meta [AExpr]
+-- an instruction. This encode explicit calls,
+-- the parser will always produce ICall with callName = "call"
+-- which are then replaced 
+data Instr meta =
+             IYield meta [AExpr]
            | IAssign meta VarRef AExpr
            | IIf meta BExpr (IBlock meta) (IBlock meta)
            | IWhile meta BExpr (IBlock meta)
@@ -94,22 +129,27 @@ data Instr meta = IYield meta [AExpr]
                    , callName :: String
                    , callArgs :: [AExpr]
                    , retArgs :: [String] }
-           deriving (Show, Functor, Foldable, Traversable)
+           deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+
+iAexprs :: Traversal' (Instr meta) (AExpr)
+iAexprs f (IYield m as) = IYield m <$> traverse f as
+iAexprs f (IAssign m vr ae) = IAssign m vr <$> f ae
+iAexprs f (IIf m be ibA ibB) = (liftA3 $ IIf m)
+    (bAexprs f be) (ibAexprs f ibA) (ibAexprs f ibB)
+iAexprs f (IWhile m be blk) = (liftA2 $ IWhile m) (bAexprs f be) (ibAexprs f blk)
+iAexprs f (IAssert m be) = IAssert m <$> (bAexprs f be)
+iAexprs f (ICall m callName callArgs retArgs) =
+    (\x -> ICall m callName x retArgs) <$> (sequenceA $ map f callArgs)
+iAexprs f x = pure x
+
 
 data DType = DInt | DBool | DByte | DIntArr
+    deriving (Eq, Ord, Show)
 
 data VarDecl = VarDecl {
         varName :: String,
         varType :: DType }
-
-data Proc = Proc { name :: String
-                 , inParam :: [VarDecl]
-                 , outParam :: [DType]
-                 , state :: [VarDecl]
-                 , body :: IBlock IMeta}
-
-data File = File [Proc]
-
+    deriving (Eq, Ord, Show)
 
 -- Utils 
 aExprFold :: (AExpr -> a) -> AExpr -> [a]
@@ -167,29 +207,8 @@ instrFold fn i = let
     in
         (x:xs)
 
-instrMap :: (Instr IMeta -> Instr IMeta) -> Proc -> Proc
-instrMap fn proc =
-    let
-        iMap i = case i of 
-            (IYield _ _) -> fn i
-            (IAssign _ _ _) -> fn i
-            (ILabel _ _) -> fn i
-            (IGoto _ _) -> fn i
-            (ICall _ _ _ _) -> fn i
-            (IAssert _ _) -> fn i
-            (IIf a b blk1 blk2) -> IIf a b (blockMap blk1) (blockMap blk2)
-            (IWhile a b blk) -> IWhile a b (blockMap blk)
-
-        blockMap (IBlock is) = IBlock $ map iMap is
-    in
-        proc { body = blockMap (body proc) }
-
-
 blockFold :: (Instr m1 -> a) -> (IBlock m1) -> [a]
 blockFold fn (IBlock is) = concat $ map (instrFold fn) is
-
-machineFilter :: (Proc -> Bool) -> File -> File
-machineFilter f (File ps) = File (filter f ps)
 
 -- Insert incrementing values in meta 
 -- Can be applied to IBlock 
@@ -198,3 +217,9 @@ metaEnumerate t = evalState (traverse step t) 1
     where step a = do tag <- get
                       modify succ
                       return tag
+
+-- some handy utils that are used in instantiation and checkers...
+isCall :: Instr a -> Bool
+isCall (ICall _ _ _ _) = True
+isCall _ = False
+

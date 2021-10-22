@@ -1,24 +1,9 @@
-/*  filz - a model checked I2C specification 
- *  copyright (c) 2021, ETH Zurich, Systems Group
- *
- *  this program is free software: you can redistribute it and/or modify
- *  it under the terms of the gnu general public license as published by
- *  the free software foundation, either version 3 of the license, or
- *  (at your option) any later version.
- *
- *  this program is distributed in the hope that it will be useful,
- *  but without any warranty; without even the implied warranty of
- *  merchantability or fitness for a particular purpose.  see the
- *  gnu general public license for more details.
- *
- *  you should have received a copy of the gnu general public license
- *  along with this program.  if not, see <https://www.gnu.org/licenses/>.
- */
-
 /*
  * Shows the equivalence of Hl+Trans+Byte+Symbol+El and HlAbs
  */
 
+#include "common.xp"
+#include "eep.pml"
 #include "i2c-spec.pml"
 
 #if ABS_LEVEL >= 4
@@ -26,7 +11,7 @@
 #endif
 
 init {
-    run HlRun();
+    HlRun();
     run verifier();
 }
 
@@ -45,10 +30,10 @@ proctype verifier() {
     chan eeps_out = [0] of {int,int,intarr};
 
     /* the concrete channels, hard-named in i2c.pml */
-    #define conc_m_out EepMaster_in
-    #define conc_m_in  EepMaster_out
-    #define conc_s_out EepSlave_in
-    #define conc_s_in  EepSlave_out
+    #define conc_m_out controller_Eep_in
+    #define conc_m_in  controller_Eep_out
+    #define conc_s_out responder_Eep_in 
+    #define conc_s_in  responder_Eep_out 
 
     run HlAbs(abs_m_in, abs_m_out, abs_s_in, abs_s_out);
     run EepValid(eepm_in, eepm_out, eeps_in, eeps_out);

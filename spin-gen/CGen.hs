@@ -15,15 +15,9 @@
  - you should have received a copy of the gnu general public license                                               
  - along with this program.  if not, see <https://www.gnu.org/licenses/>.                                          
  -}
-
-{-
- - C Generator
- -
- -
- -}
 module CGen(generateCDefs, generateCHdrs) where
 
-import CoreAST
+import InstAST
 import GeneratorOpts
 import Data.List
 import Data.Char (isAlpha,toUpper)
@@ -41,7 +35,7 @@ nlSemiJoin x = (intercalate ";\n" x ) ++ ";\n"
 addrOf x = "&" ++ x
 
 
-var :: Proc -> VarRef -> String
+var :: InstProc -> VarRef -> String
 var proc vr = 
     let
         gd = var proc -- self reference
@@ -73,8 +67,8 @@ gOutParams :: [DType] -> [String]
 gOutParams ds = map (\(x,i) -> gDtype i ++ " *out_" ++ show x) $ enum ds
 
 -- Generate a sub struct for that specific process
-gPStateStruct :: Proc -> String
-gPStateStruct (Proc name _ _ state _) =
+gPStateStruct :: InstProc -> String
+gPStateStruct (InstProc name _ _ state _) =
     let 
         stName = name
         fm (VarDecl n t) = (gDtype t) ++ " " ++ n
@@ -85,7 +79,7 @@ gPStateStruct (Proc name _ _ state _) =
         "} " ++ stName
  
 -- A top level struct containing sub structs for all machines
-gStateStruct :: [Proc] -> String
+gStateStruct :: [InstProc] -> String
 gStateStruct ps = "static struct {\n" ++ 
         (nlSemiJoin $ map gPStateStruct ps) ++ "\n} global;"
 
@@ -177,10 +171,10 @@ gJumpTable gd blk =
 gIBlock :: GenData -> IBlock Integer -> String
 gIBlock gd (IBlock is) = nlJoin (map (gInstr gd) is)
         
-gProcDef :: Proc -> String
+gProcDef :: InstProc -> String
 gProcDef p =
    let 
-        (Proc name inp outp state body) = p    
+        (InstProc name inp outp state body) = p    
         gd = var p
         body' = metaEnumerate body
         arglist = inParens $ (gInParams inp) ++ (gOutParams outp)
@@ -191,10 +185,10 @@ gProcDef p =
     in
         "void " ++ name ++ arglist ++ b
 
-gProcDecl :: Proc -> String
+gProcDecl :: InstProc -> String
 gProcDecl p =
    let 
-        (Proc name inp outp state body) = p    
+        (InstProc name inp outp state body) = p    
         gd = var p
         (IBlock body') = metaEnumerate body
         arglist = inParens $ (gInParams inp) ++ (gOutParams outp)
@@ -202,16 +196,16 @@ gProcDecl p =
         "void " ++ name ++ arglist ++ ";"
 
 
-generateCDefs :: String -> File -> String
-generateCDefs outfn (File ps) = nlJoin ([gHeader outfn, gStateStruct ps] ++
+generateCDefs :: String -> InstFile -> String
+generateCDefs outfn (InstFile ps _) = nlJoin ([gHeader outfn, gStateStruct ps] ++
     (map gProcDef ps))
 
 gHdrMacroName x = "_" ++ (map toUpper $ filter isAlpha x) ++ "_"
 gHdrStartBarrier x = "#ifndef " ++ x ++ "\n#define " ++ x ++ "\n"
 gHdrEndBarrier = "#endif"
 
-generateCHdrs :: String -> File -> String
-generateCHdrs outfn (File ps) =
+generateCHdrs :: String -> InstFile -> String
+generateCHdrs outfn (InstFile ps _) =
     let
         start = gHdrStartBarrier $ gHdrMacroName outfn
         tdef = "typedef struct { int arr[" ++ 

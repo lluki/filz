@@ -5,13 +5,18 @@ SPINOPTS+=-E-I$(shell pwd)/build -E-I$(shell pwd)/xp-src -E-I$(shell pwd)/spin-s
 # Conditional assign so we can set it in env
 SEARCH_DEPTH?=1000000
 
-all: build/i2c.pml build/i2c.c build/test-symbol-reader example verif
+all: build/as5011.pml build/eep.pml build/eep.c build/test-symbol-reader example verif
 
 # the common PML files
-PML=build/i2c.pml build/example.pml spin-src/i2c-spec.pml xp-src/common.xp
+PML=build/as5011.pml build/eep.pml build/example.pml spin-src/i2c-spec.pml xp-src/common.xp
+
+#.PHONY: paper
+#paper: paper/paper.pdf
+#paper/paper.pdf: paper/*.tex
+#	cd paper && make
 
 ## Basename for runspin and runreplay
-BASENAME=transaction-eq
+BASENAME=as5011-eq
 ABS_LEVEL=0
 
 .PHONY: runspin
@@ -35,16 +40,22 @@ runreplay:
 	cd build && spin -p -replay -u10000 $(BASENAME).pml 
 
 .PHONY: verif-echo
-verif-echo: build/verif/el-master-echo build/verif/sym-eq build/verif/byte-echo \
+verif-echo: build/verif/el-master-echo \
+			build/verif/sym-eq \
+			build/verif/byte-echo
 
 .PHONY: verif
 verif: build/verif/sym-eq \
-	   build/verif/byte-eq build/verif/transaction-eq build/verif/hl-eq
+	   build/verif/byte-eq \
+	   build/verif/transaction-eq \
+	   build/verif/hl-eq
 
-.PHONY: verif
+as5011-verif: build/verif/as5011-eq
+
+.PHONY: quickverif
 quickverif: build/verif/sym-eq
 #PANCCOPTS+=-DVECTORSZ=4096 -Wno-format-overflow #-O3 #-DNCORE=8 
-PANCCOPTS+=-DVECTORSZ=4096 -Wno-format-overflow -DNP #-O3 #-DNCORE=8 
+PANCCOPTS+=-DVECTORSZ=4096 -Wno-format-overflow #-DNP #-O3 #-DNCORE=8 
 
 
 build/verif/byte-eq/full.txt: spin-src/byte-eq.pml  $(PML) 
@@ -58,6 +69,8 @@ build/verif/byte-eq/full.txt: spin-src/byte-eq.pml  $(PML)
 		
 
 build/verif/%: spin-src/%.pml  $(PML) 
+	# We build two pan's here, one for the non-progress cycle detection pan_np
+	# and one for the invalid end state. they seem to be incompatible.
 	echo "Verifying $@   $<"
 	@mkdir -p $@
 	@cd $@; for x in {0..4}; do \
@@ -67,11 +80,16 @@ build/verif/%: spin-src/%.pml  $(PML)
 			continue ; \
 		fi ; \
 		cc $(PANCCOPTS) -o pan pan.c ;\
-		./pan -l -m$(SEARCH_DEPTH) -n > $$x.txt ;\
+		cc $(PANCCOPTS) -DNP -o pan_np pan.c ;\
+		./pan -m$(SEARCH_DEPTH) -n > $$x.txt ;\
+		./pan_np -l -m$(SEARCH_DEPTH) -n > $$x-np.txt ;\
 		echo "  Result in $@/$$x.txt" ;\
 		grep "errors" $$x.txt ;\
+		grep "errors" $$x-np.txt ;\
 		! grep 'max search depth too small' $$x.txt ;\
+		! grep 'max search depth too small' $$x-np.txt ;\
 		! grep 'assertion violated' $$x.txt ;\
+		! grep 'assertion violated' $$x-np.txt ;\
 	done
 
 #build/verif-example-eq: $(PML) spin-src/example-eq.pml
@@ -161,11 +179,15 @@ verif-time-plots: benchmarks/verification_time_plots.py
 example: build/example.pml build/verif/example-eq
 	
 
-.PHONY: run
+.PHONY: run run_spin_gen_test
 run: build/test-symbol-reader
 	./build/test-symbol-reader
 
-spin-gen/Main: spin-gen/*.hs
+run_spin_gen_test: spin-gen/Test
+	cd spin-gen && ./Test
+
+
+spin-gen/Main spin-gen/Test: spin-gen/*.hs
 	cd spin-gen && make
 
 build/test-symbol-reader: build/test-symbol-reader.c build/i2c-test-symbol-reader.c build/i2c-test-symbol-reader.h
@@ -174,25 +196,25 @@ build/test-symbol-reader: build/test-symbol-reader.c build/i2c-test-symbol-reade
 build/test-symbol-reader.c: xp-src/test-symbol-reader.c
 	cp xp-src/test-symbol-reader.c build/test-symbol-reader.c
 
-GEN_MACHINES=SymbolReader,SclDriver,SdaDriver,MasterDriver,SymbolMasterAgg,ByteMasterStub
+GEN_MACHINES=controller_Sym
 
-build/i2c-test-symbol-reader.c: spin-gen/Main build/i2c.xpp
+build/i2c-test-symbol-reader.c: spin-gen/Main build/eep.xpp
 	mkdir -p build
-	./spin-gen/Main -i build/i2c.xpp -m$(GEN_MACHINES) -C -o $@
+	./spin-gen/Main -i build/eep.xpp -m$(GEN_MACHINES) -C -o $@
 	clang-format -i $@
 
-build/i2c-test-symbol-reader.h: spin-gen/Main build/i2c.xpp
+build/i2c-test-symbol-reader.h: spin-gen/Main build/eep.xpp
 	mkdir -p build
-	./spin-gen/Main -i build/i2c.xpp -H -o $@
+	./spin-gen/Main -i build/eep.xpp -H -o $@
 
 build/test.h: spin-gen/Main build/test.xpp
 	mkdir -p build
-	./spin-gen/Main -i build/i2c.xpp -H -o $@
+	./spin-gen/Main -i build/eep.xpp -H -o $@
 
-build/rpi: build/i2c.c build/i2c.h spin-src/rpi-boilerplate.c
+build/rpi: build/eep.c build/eep.h spin-src/rpi-boilerplate.c
 	mkdir -p build
 	cp spin-src/rpi-boilerplate.c build/rpi-boilerplate.c
-	cd build && gcc $(GCCOPTS) i2c.c rpi-boilerplate.c -o rpi
+	cd build && gcc $(GCCOPTS) eep.c rpi-boilerplate.c -o rpi
 
 
 build/%.xpp: xp-src/%.xp
@@ -213,7 +235,7 @@ build/%.h: build/%.xpp spin-gen/Main build/%.xpp
 	./spin-gen/Main -i $< -H -o $@
 
 .PHONY: count
-count: build/i2c.c build/rpi
+count: build/eep.c build/rpi
 	echo "RPI boilerplate LOC:"
 	wc -l spin-src/rpi-boilerplate.c 
 	echo "I2C state machines LOC:"
@@ -223,15 +245,17 @@ count: build/i2c.c build/rpi
 
 clean:
 	cd spin-gen && make clean
+	cd paper && make clean
 	rm -rf build
 
 
 .PHONY: release
 release: clean 
-	echo "Creating release in ../i2c-model-release"
-	mkdir -p ../i2c-model-release
-	cp -R spin-src ../i2c-model-release
-	cp -R spin-gen ../i2c-model-release
-	cp -R xp-src ../i2c-model-release
-	cp Makefile ../i2c-model-release
-	cp README.md ../i2c-model-release
+	echo "Creating release in ../filz"
+	mkdir -p ../filz
+	cp -R spin-src ../filz
+	cp -R spin-gen ../filz
+	cp -R xp-src ../filz
+	cp -R docs ../filz
+	cp Makefile ../filz/Makefile
+	cp README.md ../filz/README.md

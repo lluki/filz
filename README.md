@@ -1,4 +1,4 @@
-Filz - A model checked I2C specification
+Filz - A model checked I2C stack
 ======
 
 I2C is a pervasive bus protocol used for querying sensors and actuators, but it
@@ -29,15 +29,15 @@ The corresponding paper of this project is published at [SPIN2021](https://conf.
 
 Directory structure
 ----
-
+*  paper/ - Paper.
 *  spin-gen/ - DSL for state machine (XP) files. Generates C and promela
 *  xp-src/   - Statemachine description in XP format.
 *  spin-src/   - Verification in promela
+*  docs/       - Documentation
 
 
 Dependencies
 ----
-On Ubuntu 20.04
 `apt-get install ghc libghc-megaparsec-dev spin build-essential clang-format libghc-missingh-dev`.
 
 
@@ -45,6 +45,7 @@ Make
 ----
 Interesting targets: 
 
+ * make paper - build the paper
  * make run   - build the I2C state machine and run a sample C program
  * make verif - Verify all the targets
  * make build/rpi  - build the raspberry pi executable. Note that you have to build it on the RPI itself, no cross-compilation support (yet).
@@ -61,6 +62,10 @@ it human readable, the symgrep tool (currently) accepts "tr" "sym" "byte"
 as argument and filters and pretty prints the messages exchanged at this
 layer. Run for example `make spinprun | ./tools/symgrep tr`
 
+Tutorial
+----
+[Can be found here](docs/tutorial.md)
+
 DSL
 ===
 The spin-gen compiler accepts the following command line arguments
@@ -69,3 +74,4 @@ The spin-gen compiler accepts the following command line arguments
  * -H  - generate a C header file with the state machine signatures
  * -C  - generate a C file with the state machine implementations
  * -P  - generate Promela
+

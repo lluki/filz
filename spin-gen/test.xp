@@ -1,0 +1,19 @@
+proc (int) NCtrl() {
+    int data;
+    data = call();
+}
+
+proc () ElCtrl() {
+    int data;
+    data = call();
+}
+
+
+system {
+    layers [Bus, Nibble];
+
+    device Ctrl {
+        Nibble : NCtrl;
+        Bus : ElCtrl;
+    };
+}

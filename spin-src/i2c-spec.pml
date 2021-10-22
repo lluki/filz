@@ -1,25 +1,4 @@
-/*  filz - a model checked I2C specification 
- *  copyright (c) 2021, ETH Zurich, Systems Group
- *
- *  this program is free software: you can redistribute it and/or modify
- *  it under the terms of the gnu general public license as published by
- *  the free software foundation, either version 3 of the license, or
- *  (at your option) any later version.
- *
- *  this program is distributed in the hope that it will be useful,
- *  but without any warranty; without even the implied warranty of
- *  merchantability or fitness for a particular purpose.  see the
- *  gnu general public license for more details.
- *
- *  you should have received a copy of the gnu general public license
- *  along with this program.  if not, see <https://www.gnu.org/licenses/>.
- */
-
 /* specifications of the machines */
-
-#include "common.xp"
-#include "i2c.pml"
-
 
 /*
  *  ABS_LEVEL configures at which layer in the stack we replace
@@ -29,101 +8,141 @@
  *  ABS_LEVEL = 2 -> abstract at byte level (runs ByteAbs)
  *  ABS_LEVEL = 3 -> abstract at transaction level (runs trans act)
  *  ABS_LEVEL = 4 -> abstract at HL LEVEL
+
+ *
+ *  For excluding the standard I2C specifications, the following defines
+ *  are considered:
+ *  SKIP_DEFAULT_BYTE
+ * 
  */
 #if !defined(ABS_LEVEL) || ABS_LEVEL < 0 || ABS_LEVEL > 4 
     #error "ABS_LEVEL must be >= 0 and <= 4"
 #endif
 
 #if ABS_LEVEL >= 1
-#define SymbolRun SymbolAbsRun
+#define SymbolRun() run Sym_abs_run()
 #else
-#define SymbolRun SymbolConcRun
+#define SymbolRun() run Sym_conc_run(); run El_conc_run()
 #endif 
 
 #if ABS_LEVEL >= 2
-#define ByteRun ByteAbsRun
+#define ByteRun() run Byte_abs_run()
 #else
-#define ByteRun ByteConcRun
+#define ByteRun() run Byte_conc_run(); SymbolRun()
 #endif 
 
 #if ABS_LEVEL >= 3
-#define TransactionRun TransactionAbsRun
+#define TransactionRun() run Tr_abs_run()
 #else
-#define TransactionRun TransactionConcRun
+#define TransactionRun() run Tr_conc_run(); ByteRun()
 #endif 
 
 #if ABS_LEVEL >= 4
-#define HlRun HlAbsRun
+#define HlRun() run HlAbsRun();
 #else
-#define HlRun HlConcRun
+#define HlRun() run Hl_conc_run(); TransactionRun()
 #endif 
 
+proctype ElBus1(chan p1_in; chan p1_out) {
+    int scl, sda, scl1, sda1; 
+    scl = 1;
+    sda = 1;
+start:
+    p1_in!scl,sda;
+    p1_out?scl,sda;
+    goto start; 
+}
 
+proctype ElBus2(chan p1_in; chan p1_out; chan p2_in; chan p2_out) {
+    int scl, sda, scl1, sda1, scl2, sda2; 
+    scl = 1;
+    sda = 1;
+start:
+    p1_in!scl,sda;
+    p1_out?scl1,sda1;
+    p2_in!scl,sda;
+    p2_out?scl2,sda2;
+
+    if
+    :: scl1 == 0 || scl2 == 0 -> scl = 0;
+    :: else -> scl = 1;
+    fi
+
+    if
+    :: sda1 == 0 || sda2 == 0 -> sda = 0;
+    :: else -> sda = 1;
+    fi
+    
+    goto start; 
+}
+
+proctype ElBus3(chan p1_in; chan p1_out; chan p2_in; chan p2_out; chan p3_in; chan p3_out) {
+    int scl, sda, scl1, sda1, scl2, sda2, scl3, sda3; 
+    scl = 1;
+    sda = 1;
+start:
+    p1_in!scl,sda;
+    p1_out?scl1,sda1;
+    p2_in!scl,sda;
+    p2_out?scl2,sda2;
+    p3_in!scl,sda;
+    p3_out?scl3,sda3;
+
+    if
+    :: scl1 == 0 || scl2 == 0 || scl3 == 0 -> scl = 0;
+    :: else -> scl = 1;
+    fi
+
+    if
+    :: sda1 == 0 || sda2 == 0 || sda3 == 0 -> sda = 0;
+    :: else -> sda = 1;
+    fi
+    
+    goto start; 
+}
+
+proctype ElBus4(chan p1_in; chan p1_out; chan p2_in; chan p2_out; chan p3_in; chan p3_out; chan p4_in; chan p4_out) {
+    int scl, sda, scl1, sda1, scl2, sda2, scl3, sda3, scl4, sda4; 
+    scl = 1;
+    sda = 1;
+start:
+    p1_in!scl,sda;
+    p1_out?scl1,sda1;
+    p2_in!scl,sda;
+    p2_out?scl2,sda2;
+    p3_in!scl,sda;
+    p3_out?scl3,sda3;
+    p3_in!scl,sda;
+    p3_out?scl4,sda4;
+
+    if
+    :: scl1 == 0 || scl2 == 0 || scl3 == 0 || scl4 == 0 -> scl = 0;
+    :: else -> scl = 1;
+    fi
+
+    if
+    :: sda1 == 0 || sda2 == 0 || sda3 == 0 || sda4 == 0 -> sda = 0;
+    :: else -> sda = 1;
+    fi
+    
+    goto start; 
+}
+
+
+
+
+
+
+
+
+
+#ifndef SKIP_DEFAULT_SYM
 /*
  * Run SymbolAbs in place of the actual EL machines
  */
-proctype SymbolAbsRun(){
-    run SymbolAbs(ByteMaster_out, ByteSlave_out, ByteMaster_in, ByteSlave_in);
+proctype Sym_abs_run(){
+    run SymbolAbs(controller_Byte_out, responder_Byte_out, controller_Byte_in, responder_Byte_in);
 }
-
-/*
- * Run the concrete symbol machines, operating on ByteMaster_in, ByteSlave_in,
- * ByteMaster_out, ByteSlave_out
- */
-proctype SymbolConcRun(){
-    run ElBus2();
-
-    // Master side
-    run MasterDriver();
-    run SdaDriver();
-    run SclDriver();
-    run SymbolReader();
-    run SymbolMasterAgg();
-
-
-    // Slave side
-    run SlaveDriver();
-    run SymbolReaderSlave();
-    run SdaDriverSlave();
-    run SymbolSlaveAgg();
-
-    // Start the bus
-    ElBus2_in!1;
-}
-
-
-proctype ByteConcRun() {
-    run SymbolRun(); 
-
-    run ByteSlave();
-    run ByteMaster();
-}
-
-proctype ByteAbsRun() {
-    run ByteAbs(TransactionMaster_out, TransactionMaster_in,
-        TransactionSlave_out, TransactionSlave_in);
-}
-
-proctype TransactionConcRun() {
-    run ByteRun();
-    run TransactionMaster();
-    run TransactionSlave();
-}
-
-proctype TransactionAbsRun() {
-    run TransactionAbs(HlMaster_out, HlMaster_in, HlSlave_out, HlSlave_in);
-}
-
-proctype HlConcRun() {
-    run TransactionRun();
-    run HlMaster();
-    run HlSlave();
-}
-
-proctype HlAbsRun() {
-    run HlAbs(EepMaster_out, EepMaster_in, EepSlave_out, EepSlave_in);
-}
-
 /*
  * The symbol layer specification
  */
@@ -181,7 +200,13 @@ read2:
 
     goto next_sym;
 }
+#endif /* SKIP_DEFAULT_SYM */
 
+#ifndef SKIP_DEFAULT_BYTE
+proctype Byte_abs_run() {
+    run ByteAbs(controller_Tr_out, controller_Tr_in,
+        responder_Tr_out, responder_Tr_in);
+}
 /*
  * The byte layer specification
  */
@@ -272,12 +297,18 @@ in_trans:
         false;
     fi
 }
+#endif
 
+
+#ifndef SKIP_DEFAULT_TR
 /*
  * Specification (expected behaviour) of the Transaction Layer
  */
 #define TRABS_DEBUG(...) 
 //#define TRABS_DEBUG printf
+proctype Tr_abs_run() {
+    run TransactionAbs(controller_Hl_out, controller_Hl_in, responder_Hl_out, responder_Hl_in);
+}
 proctype TransactionAbs(chan m_in; chan m_out; chan s_in; chan s_out) {
     intarr out_dat;
     intarr res_dat;
@@ -375,7 +406,14 @@ master_read:
     extra_sres = -1;
     goto begin;
 }
+#endif
 
+
+#ifndef SKIP_DEFAULT_HL
+proctype Hl_abs_run() {
+    run HlAbs(controller_Eep_out, controller_Eep_in, responder_Eep_out, 
+            responder_Eep_in);
+}
 /* HlAbs */
 // The synchronous pattern of events
 // is as follows, read from left to right:
@@ -452,3 +490,4 @@ read:
     m_res = ME_RES_OK;
     goto start;
 }
+#endif

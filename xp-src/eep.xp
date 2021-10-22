@@ -1,0 +1,21 @@
+#include "i2c.xp"
+
+system {
+    layers [Sym, Byte, Tr, Hl, Eep];
+
+    device controller {
+        Sym : SymController;
+        Byte : ByteCommon;
+        Tr : TrController;
+        Hl : HlController;
+        Eep : EepController;
+    };
+
+    device responder {
+        Sym : SymResponder;
+        Byte : ByteCommon; 
+        Tr : TrResponder<EEPROM_ADDR>;
+        Hl : HlResponder;
+        Eep : EepSlave;
+    };
+}

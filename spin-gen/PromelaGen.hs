@@ -15,15 +15,13 @@
  - you should have received a copy of the gnu general public license                                               
  - along with this program.  if not, see <https://www.gnu.org/licenses/>.                                          
  -}
-
-
 {-
  - Promela Generator
  -
  -}
 module PromelaGen(generatePromela) where
 
-import CoreAST
+import InstAST
 import Data.List
 import GeneratorOpts
 
@@ -36,10 +34,11 @@ gDtype DInt = "int"
 gDtype DBool = "bool"
 gDtype DByte = "byte"
 gDtype DIntArr = "intarr"
+nlJoin = intercalate "\n"
 
 
 -- generate the channel declecarations for a process
-gProcChannels :: Proc -> String
+gProcChannels :: InstProc -> String
 gProcChannels p = let
         my_in_chan_name = inChanName $ name p
         chan_t [] = "int"
@@ -57,7 +56,7 @@ gProcChannels p = let
     
 
 -- generate the process body
-gProc :: Proc -> String
+gProc :: InstProc -> String
 gProc p = let
     my_out_chan_name = outChanName $ name p
     my_in_chan_name = inChanName $ name p
@@ -143,10 +142,32 @@ gProc p = let
         hdr ++
         gen_fbody
 
-generatePromela :: File -> String
-generatePromela (File pcs) = let 
-        prelude = "typedef intarr { int arr[" ++ show intarr_size ++ "] }\n"
-        header = intercalate "\n" (map gProcChannels pcs) 
-        body = intercalate "\n" (map gProc pcs)
+gen_starters :: (String, [String]) -> String
+gen_starters (layer, procs) =
+    "proctype " ++ layer ++ "_conc_run(){\n" ++ 
+    (nlJoin $ map (\pn -> "    run " ++ pn ++ "();") procs) ++
+    "\n}\n"
+
+-- hard coded extra starter for the bus implementation (written in i2c-spec.pml)
+-- Assumes it gets the layerinfo of the lowest layer and it's currently also hard coded
+-- that they get a pair of ints.
+gen_el_starter :: (String, [String]) -> String
+gen_el_starter (_,procs) = 
+    let 
+        num = show $ length procs
+        args = intercalate "," $ concat $ map (\x -> [x ++ "_in", x ++ "_out"]) procs
     in
-        prelude ++ header ++ body
+        "proctype El_conc_run(){\n" ++
+        "   run ElBus" ++ num ++ "(" ++ args ++ ");\n" ++ 
+        "}\n"
+
+generatePromela :: InstFile -> String
+generatePromela (InstFile pcs li) = let 
+        prelude = "typedef intarr { int arr[" ++ show intarr_size ++ "] }\n"
+        header = nlJoin $ map gProcChannels pcs
+        body = nlJoin $ map gProc pcs
+        starters = nlJoin $ map gen_starters li
+        el_starter = gen_el_starter (head li)
+
+    in
+        prelude ++ header ++ body ++ "\n\n" ++ starters ++ el_starter

@@ -1,229 +1,212 @@
-/*  filz - a model checked I2C specification 
- *  copyright (c) 2021, ETH Zurich, Systems Group
- *
- *  this program is free software: you can redistribute it and/or modify
- *  it under the terms of the gnu general public license as published by
- *  the free software foundation, either version 3 of the license, or
- *  (at your option) any later version.
- *
- *  this program is distributed in the hope that it will be useful,
- *  but without any warranty; without even the implied warranty of
- *  merchantability or fitness for a particular purpose.  see the
- *  gnu general public license for more details.
- *
- *  you should have received a copy of the gnu general public license
- *  along with this program.  if not, see <https://www.gnu.org/licenses/>.
- */
-
 #include "common.xp"
 
 proc (int /* action */, int /* addr */, int /* dat_len */, intarr /* dat */)
-EepMaster(int res, intarr res_data) {
-    intarr data;
+EepController(int res, intarr res_data) {
+	intarr data;
 
-    assert(res == ME_RES_IDLE);
+	assert(res == ME_RES_IDLE);
 
 write:
-    data[0] = 32;
-    data[1] = 33;
-    yield (ME_ACT_WRITE_EEPROM, 6, 2, data);
-    assert(res == ME_RES_OK);
+	data[0] = 32;
+	data[1] = 33;
+	yield (ME_ACT_WRITE_EEPROM, 6, 2, data);
+	assert(res == ME_RES_OK);
 
 read:
-    yield (ME_ACT_READ_EEPROM, 6, 2, data);
-    assert(res == ME_RES_OK);
-    assert(res_data[0] == 32);
-    assert(res_data[1] == 33);
+	yield (ME_ACT_READ_EEPROM, 6, 2, data);
+	assert(res == ME_RES_OK);
+	assert(res_data[0] == 32);
+	assert(res_data[1] == 33);
 
 goto write;
 }
 
 proc
 (int /* action */, int /* address */, int /* tdata_len */, intarr /* tdata */)
-HlMaster(int res, int res_len, intarr res_data) {
+HlController(int res, int res_len, intarr res_data) {
 
-    int act;
-    int addr;
-    int dat_len;
-    intarr dat;
+	int act;
+	int addr;
+	int dat_len;
+	intarr dat;
 
-    intarr out_dat;
-    int pos;
-    int out_dat_len;
+	intarr out_dat;
+	int pos;
+	int out_dat_len;
 
-    int me_res;
-    intarr me_res_data;
-    
+	int me_res;
+	intarr me_res_data;
+	
 
-    me_res = ME_RES_IDLE;
+	me_res = ME_RES_IDLE;
 
 start:
-    (act, addr, dat_len, dat) = EepMaster(me_res, me_res_data);
-    if(act == ME_ACT_WRITE_EEPROM){
-        goto write;
-    }
-    if(act == ME_ACT_READ_EEPROM){
-        goto read;
-    }
-    assert(false);
+	(act, addr, dat_len, dat) = call(me_res, me_res_data);
+	if(act == ME_ACT_WRITE_EEPROM){
+		goto write;
+	}
+	if(act == ME_ACT_READ_EEPROM){
+		goto read;
+	}
+	assert(false);
 
 
 write:
-    // Write to EEPROM 4 bytes, at addr. 
-    out_dat[0] = addr >> 8;
-    out_dat[1] = addr & 255;
-    pos = 2;
-    while(pos < INTARR_LEN){
-        out_dat[pos] = dat[pos - 2];
-        pos = pos + 1;
-    }
-    out_dat_len = dat_len + 2;
+	// Write to EEPROM 4 bytes, at addr. 
+	out_dat[0] = addr >> 8;
+	out_dat[1] = addr & 255;
+	pos = 2;
+	while(pos < INTARR_LEN){
+		out_dat[pos] = dat[pos - 2];
+		pos = pos + 1;
+	}
+	out_dat_len = dat_len + 2;
 
-    yield (TR_ACT_WRITE, EEPROM_ADDR, out_dat_len, out_dat);
-    assert(res == RES_OK);
+	yield (TR_ACT_WRITE, EEPROM_ADDR, out_dat_len, out_dat);
+	assert(res == RES_OK);
 
-    yield (TR_ACT_STOP, 0, 0, out_dat);
-    assert(res == RES_OK);
+	yield (TR_ACT_STOP, 0, 0, out_dat);
+	assert(res == RES_OK);
 
-    me_res = ME_RES_OK;
-    goto start;
+	me_res = ME_RES_OK;
+	goto start;
 
 read:
 
-    // Read from EEPROM 4 bytes, at addr
-    out_dat[0] = addr >> 8;
-    out_dat[1] = addr & 255;
-    out_dat_len = 2;
+	// Read from EEPROM 4 bytes, at addr
+	out_dat[0] = addr >> 8;
+	out_dat[1] = addr & 255;
+	out_dat_len = 2;
 
-    yield (TR_ACT_WRITE, EEPROM_ADDR, out_dat_len, out_dat);
-    assert(res == TR_RES_OK);
+	yield (TR_ACT_WRITE, EEPROM_ADDR, out_dat_len, out_dat);
+	assert(res == TR_RES_OK);
 
-    yield (TR_ACT_READ, EEPROM_ADDR, dat_len, dat);
-    assert(res == TR_RES_OK);
-    
-    pos = 0;
-    while(pos < INTARR_LEN){
-        me_res_data[pos] = res_data[pos];
-        pos = pos + 1;
-    }
+	yield (TR_ACT_READ, EEPROM_ADDR, dat_len, dat);
+	assert(res == TR_RES_OK);
+	
+	pos = 0;
+	while(pos < INTARR_LEN){
+		me_res_data[pos] = res_data[pos];
+		pos = pos + 1;
+	}
 
-    yield (TR_ACT_STOP, 0, 0, me_res_data);
-    assert(res == TR_RES_OK);
+	yield (TR_ACT_STOP, 0, 0, me_res_data);
+	assert(res == TR_RES_OK);
 
-    me_res = ME_RES_OK;
-    goto start;
+	me_res = ME_RES_OK;
+	goto start;
 }
 
 
-proc (int, int) TransactionMaster(int res, int res_data)
+proc (int, int) TrController(int res, int res_data)
 {
-    // data provided by HlMaster, to be handled
-    int act;
-    int dat_len;
-    intarr dat;
-    int dat_pos;
-    int addr;
-    int addr_byte;
+	// data provided by HlMaster, to be handled
+	int act;
+	int dat_len;
+	intarr dat;
+	int dat_pos;
+	int addr;
+	int addr_byte;
 
-    // result for HLMaster
-    int h_res;
-    int h_res_len;
-    intarr h_res_data;
-    int h_res_pos;
+	// result for HLMaster
+	int h_res;
+	int h_res_len;
+	intarr h_res_data;
+	int h_res_pos;
 
-    h_res_len = 0;
-    h_res = TR_RES_OK;
+	h_res_len = 0;
+	h_res = TR_RES_OK;
 
 start:
-    (act, addr, dat_len, dat) = HlMaster(h_res, h_res_len, h_res_data);        
+	(act, addr, dat_len, dat) = call(h_res, h_res_len, h_res_data);        
 
-    assert(act == TR_ACT_WRITE or act == TR_ACT_READ or
-           act == TR_ACT_IDLE or act == TR_ACT_STOP);
-    if(act == TR_ACT_IDLE) {
-        yield (BYTE_ACT_IDLE,0);
-        h_res_len = 0;
-        h_res = TR_RES_OK;
-        goto start;
-    }
-    if(act == TR_ACT_STOP){
-        goto handle_stop;
-    }
+	assert(act == TR_ACT_WRITE or act == TR_ACT_READ or
+		   act == TR_ACT_IDLE or act == TR_ACT_STOP);
+	if(act == TR_ACT_IDLE) {
+		yield (BYTE_ACT_IDLE,0);
+		h_res_len = 0;
+		h_res = TR_RES_OK;
+		goto start;
+	}
+	if(act == TR_ACT_STOP){
+		goto handle_stop;
+	}
 
 handle_rw:
-    // Send address
-    yield (BYTE_ACT_START,0);
-    if(res != BYTE_RES_START) {
-        h_res_len = 0;
-        h_res = TR_RES_FAIL;
-        goto start;
-    }
+	// Send address
+	yield (BYTE_ACT_START,0);
+	if(res != BYTE_RES_START) {
+		h_res_len = 0;
+		h_res = TR_RES_FAIL;
+		goto start;
+	}
 
-    // Send start bit & address
-    if(act == TR_ACT_READ or act == TR_ACT_WRITE) {
-        addr_byte = addr << 1;
-        if(act == TR_ACT_READ) {
-            addr_byte = addr_byte | 1;
-        } // else lsb bit is already 0
+	// Send start bit & address
+	if(act == TR_ACT_READ or act == TR_ACT_WRITE) {
+		addr_byte = addr << 1;
+		if(act == TR_ACT_READ) {
+			addr_byte = addr_byte | 1;
+		} // else lsb bit is already 0
 
-        yield (BYTE_ACT_WRITE, addr_byte);
-        if(res == BYTE_RES_NACK){
-            h_res_len = 0;
-            h_res = TR_RES_NACK;
-            goto start;
-        }
-    }
+		yield (BYTE_ACT_WRITE, addr_byte);
+		if(res == BYTE_RES_NACK){
+			h_res_len = 0;
+			h_res = TR_RES_NACK;
+			goto start;
+		}
+	}
 
-    if(act == TR_ACT_READ) {
-        assert(dat_len > 0);
-        h_res_pos = 0;
-        while(dat_len > 0) {
-            yield (BYTE_ACT_READ,0);
-            if(res != BYTE_RES_READ) {
-                h_res_len = 0;
-                h_res = TR_RES_FAIL;
-                goto start;
-            }
-            h_res = TR_RES_OK;
-            h_res_data[h_res_pos] = res_data;
-            h_res_pos = h_res_pos + 1;
-            
-            dat_len = dat_len - 1;
+	if(act == TR_ACT_READ) {
+		assert(dat_len > 0);
+		h_res_pos = 0;
+		while(dat_len > 0) {
+			yield (BYTE_ACT_READ,0);
+			if(res != BYTE_RES_READ) {
+				h_res_len = 0;
+				h_res = TR_RES_FAIL;
+				goto start;
+			}
+			h_res = TR_RES_OK;
+			h_res_data[h_res_pos] = res_data;
+			h_res_pos = h_res_pos + 1;
+			
+			dat_len = dat_len - 1;
 
-            if(dat_len > 0) {
-                // More byte will be sent
-                yield (BYTE_ACT_ACK,0);
-            }
-        }
+			if(dat_len > 0) {
+				// More byte will be sent
+				yield (BYTE_ACT_ACK,0);
+			}
+		}
 
-        yield (BYTE_ACT_NACK,0);
-        assert(res == BYTE_RES_NACK);
-        goto start;
-    }
+		yield (BYTE_ACT_NACK,0);
+		assert(res == BYTE_RES_NACK);
+		goto start;
+	}
 
-    if(act == TR_ACT_WRITE) {
-        dat_pos = 0;
-        while(dat_pos < dat_len) {
-            yield (BYTE_ACT_WRITE,dat[dat_pos]);
-            if(res != BYTE_RES_ACK) {
-                h_res_len = 0;
-                h_res = TR_RES_FAIL;
-                goto start;
-            }
-            
-            dat_pos = dat_pos + 1;
-        }
-        h_res = TR_RES_OK;
-        h_res_len = 0;
-        goto start;
-    }
+	if(act == TR_ACT_WRITE) {
+		dat_pos = 0;
+		while(dat_pos < dat_len) {
+			yield (BYTE_ACT_WRITE,dat[dat_pos]);
+			if(res != BYTE_RES_ACK) {
+				h_res_len = 0;
+				h_res = TR_RES_FAIL;
+				goto start;
+			}
+			
+			dat_pos = dat_pos + 1;
+		}
+		h_res = TR_RES_OK;
+		h_res_len = 0;
+		goto start;
+	}
 
 handle_stop:
-    yield (BYTE_ACT_STOP, 0);
-    if(res == BYTE_RES_STOP) {
-        // Transaction successfully handled
-        h_res = TR_RES_OK;
-        goto start;
-    }
+	yield (BYTE_ACT_STOP, 0);
+	if(res == BYTE_RES_STOP) {
+		// Transaction successfully handled
+		h_res = TR_RES_OK;
+		goto start;
+	}
 
 }
 
@@ -235,462 +218,287 @@ handle_stop:
  *******/
 
 // The argument is the symbol parsed, react with a symbol
-proc (int) ByteMaster(int sym) {
-    int t;
-    int res;
-    int res_data;
-    int i;
-    int data;
+// Symmetric between slave and master
+proc (int) ByteCommon(int sym) {
+	int t;
+	int res;
+	int res_data;
+	int i;
+	int data;
 
-    res = BYTE_RES_IDLE;
-    res_data = 0;
+	res = BYTE_RES_IDLE;
+	res_data = 0;
 
 end:
 rcv_from_tm:
-    (t,data) = TransactionMaster(res, res_data);     
-    if(t == BYTE_ACT_START) { goto send_start; }
-    if(t == BYTE_ACT_STOP) { goto send_stop; }
-    if(t == BYTE_ACT_WRITE) { goto write; }
-    if(t == BYTE_ACT_READ) { goto read; }
-    if(t == BYTE_ACT_IDLE) {
-        yield SYM_IDLE;
-        res_data = 0;
-        assert(sym == SYM_START or sym == SYM_IDLE or sym == SYM_STOP);
-        if(sym == SYM_START) {
-            res = BYTE_RES_START;
-        }
-        if(sym == SYM_STOP) {
-            res = BYTE_RES_STOP;
-        }
-        if(sym == SYM_IDLE) {
-            res = BYTE_RES_IDLE;
-        }
-        goto rcv_from_tm;
-    }
+	(t,data) = call(res, res_data);     
+	if(t == BYTE_ACT_START) { goto send_start; }
+	if(t == BYTE_ACT_STOP) { goto send_stop; }
+	if(t == BYTE_ACT_WRITE) { goto write; }
+	if(t == BYTE_ACT_READ) { goto read; }
+	if(t == BYTE_ACT_IDLE) {
+		yield SYM_IDLE;
+		res_data = 0;
+		assert(sym == SYM_START or sym == SYM_IDLE or sym == SYM_STOP);
+		if(sym == SYM_START) {
+			res = BYTE_RES_START;
+		}
+		if(sym == SYM_STOP) {
+			res = BYTE_RES_STOP;
+		}
+		if(sym == SYM_IDLE) {
+			res = BYTE_RES_IDLE;
+		}
+		goto rcv_from_tm;
+	}
 
 send_start:
-    yield SYM_START;
-    if(sym == SYM_START){
-        res = BYTE_RES_START;
-        res_data = 0;
-    } else {
-        res = RES_FAIL;
-        res_data = 0;
-    }
-    goto rcv_from_tm;
+	yield SYM_START;
+	if(sym == SYM_START){
+		res = BYTE_RES_START;
+		res_data = 0;
+	} else {
+		res = RES_FAIL;
+		res_data = 0;
+	}
+	goto rcv_from_tm;
 
 send_stop:
-    yield SYM_STOP;
-    if(sym == SYM_STOP) {
-        res = BYTE_RES_STOP;
-        res_data = 0;
-    } else {
-        res = RES_FAIL;
-        res_data = 0;
-    }
-    goto rcv_from_tm;
+	yield SYM_STOP;
+	if(sym == SYM_STOP) {
+		res = BYTE_RES_STOP;
+		res_data = 0;
+	} else {
+		res = RES_FAIL;
+		res_data = 0;
+	}
+	goto rcv_from_tm;
 
 write:
-    i = 8;
-    res = RES_OK;
-    res_data = 0;
+	i = 8;
+	res = RES_OK;
+	res_data = 0;
 
-    while(i>0){
-        if(((data >> (i-1)) & 1 == 1) or res == BYTE_RES_ARB_LOSS) {
-            yield SYM_BIT1;
-            if(sym != SYM_BIT1) {
-                res = BYTE_RES_ARB_LOSS; 
-            }
-        } else {
-            yield SYM_BIT0;
-            if(sym != SYM_BIT0){
-                res = BYTE_RES_ARB_LOSS; 
-            }
-        }
-        i = i - 1;
-    }
-    
-    // Read NACK bit
-    if(res == RES_OK) {
-        yield SYM_BIT1;
-        if(sym == SYM_BIT0) {
-            res = BYTE_RES_ACK;
-        } else {
-            res = BYTE_RES_NACK;
-        }
-    }
-    if(res == BYTE_RES_ARB_LOSS){
-        yield SYM_BIT1;
-    }
+	while(i>0){
+		if(((data >> (i-1)) & 1 == 1) or res == BYTE_RES_ARB_LOSS) {
+			yield SYM_BIT1;
+			if(sym != SYM_BIT1) {
+				res = BYTE_RES_ARB_LOSS; 
+			}
+		} else {
+			yield SYM_BIT0;
+			if(sym != SYM_BIT0){
+				res = BYTE_RES_ARB_LOSS; 
+			}
+		}
+		i = i - 1;
+	}
+	
+	// Read NACK bit
+	if(res == RES_OK) {
+		yield SYM_BIT1;
+		if(sym == SYM_BIT0) {
+			res = BYTE_RES_ACK;
+		} else {
+			res = BYTE_RES_NACK;
+		}
+	}
+	if(res == BYTE_RES_ARB_LOSS){
+		yield SYM_BIT1;
+	}
 
 
-    goto rcv_from_tm;
+	goto rcv_from_tm;
 
 read:
-    i = 8;
-    res_data = 0;
-    res = BYTE_RES_READ;
+	i = 8;
+	res_data = 0;
+	res = BYTE_RES_READ;
 
-    while(i>0){
-        yield SYM_BIT1;
-        if(sym == SYM_BIT1) {
-            res_data = (res_data << 1) | 1;
-        } 
-        if(sym == SYM_BIT0) {
-            res_data = (res_data << 1);
-        }
-        
-        if(sym == SYM_START) {
-            res_data = 0;
-            res = BYTE_RES_START;
-            goto rcv_from_tm;
-        }
-        if(sym == SYM_STOP){
-            res_data = 0;
-            res = BYTE_RES_STOP;
-            goto rcv_from_tm;
-        }
-        i = i - 1;
-    }
+	while(i>0){
+		yield SYM_BIT1;
+		if(sym == SYM_BIT1) {
+			res_data = (res_data << 1) | 1;
+		} 
+		if(sym == SYM_BIT0) {
+			res_data = (res_data << 1);
+		}
+		
+		if(sym == SYM_START) {
+			res_data = 0;
+			res = BYTE_RES_START;
+			goto rcv_from_tm;
+		}
+		if(sym == SYM_STOP){
+			res_data = 0;
+			res = BYTE_RES_STOP;
+			goto rcv_from_tm;
+		}
+		i = i - 1;
+	}
 
-    (t,data) = TransactionMaster(BYTE_RES_READ, res_data);     
-    assert(t == BYTE_ACT_ACK or t == BYTE_ACT_NACK);
-    if(t == BYTE_ACT_ACK) {
-        yield SYM_BIT0;
-        res = BYTE_RES_ACK;
-        res_data = 0;
-    } 
-    if(t == BYTE_ACT_NACK) {
-        yield SYM_BIT1;
-        res = BYTE_RES_NACK;
-        res_data = 0;
-    }
-    goto rcv_from_tm;
+	(t,data) = call(BYTE_RES_READ, res_data);     
+	assert(t == BYTE_ACT_ACK or t == BYTE_ACT_NACK);
+	if(t == BYTE_ACT_ACK) {
+		yield SYM_BIT0;
+		res = BYTE_RES_ACK;
+		res_data = 0;
+	} 
+	if(t == BYTE_ACT_NACK) {
+		yield SYM_BIT1;
+		res = BYTE_RES_NACK;
+		res_data = 0;
+	}
+	goto rcv_from_tm;
 }
 
-proc (int) ByteMasterStub(int sym) {
-    yield SYM_START;
-    assert(sym == SYM_START);
+proc (int) ByteControllerStub(int sym) {
+	yield SYM_START;
+	assert(sym == SYM_START);
 
-    yield SYM_BIT0;
-    assert(sym == SYM_BIT0);
+	yield SYM_BIT0;
+	assert(sym == SYM_BIT0);
 
-    yield SYM_BIT1;
-    assert(sym == SYM_BIT1);
+	yield SYM_BIT1;
+	assert(sym == SYM_BIT1);
 
-    yield SYM_START;
-    assert(sym == SYM_START);
+	yield SYM_START;
+	assert(sym == SYM_START);
 
-    yield SYM_BIT1;
-    assert(sym == SYM_BIT1);
+	yield SYM_BIT1;
+	assert(sym == SYM_BIT1);
 
-    yield SYM_BIT0;
-    assert(sym == SYM_BIT0);
+	yield SYM_BIT0;
+	assert(sym == SYM_BIT0);
 
-    yield SYM_STOP;
-    assert(sym == SYM_STOP);
+	yield SYM_STOP;
+	assert(sym == SYM_STOP);
 
-    while(1==1) {
-        yield SYM_IDLE;
-     }
+	while(1==1) {
+		yield SYM_IDLE;
+	 }
 }
 
+proc (int,int) SymController(int scl, int sda) {
+	int sym;
 
-// The ByteMaster is called from three machines (in this guaranteed
-// order): SymbolReader,SclDriver,SdaDriver. 
-// This machine aggregates this three calls, and forwards them to ByteMaster
-proc (int) SymbolMasterAgg(int sym) {
-    int out_sym;
+	sym = SYM_IDLE;
 
-start:
-    out_sym = ByteMaster(sym);
-    yield out_sym;
-    yield out_sym;
-    yield out_sym;
-    goto start;
-}
+end:
+	if(scl == 1 and sda == 1) {
+		// nothing happened on the bus
+		sym = call(SYM_IDLE);
+		if(sym == SYM_IDLE) {
+			yield (1,1);
+			goto end;
+		}
+		if(sym == SYM_START) {
+			goto send_start;
+		}
+		assert(false);
+	}
+	assert(false);
 
-
-// Outputs SCL/SDA. SCL always 1, SDA according to sym
-// inputs SCL/SDA
-proc (int,int) SdaDriver(int scl, int sda) {
-    int sym;
-
-common_init:
-end_master:
-    sym = SymbolMasterAgg(SYM_IDLE); 
-    if(sym == SYM_IDLE) {
-        yield (1,1);
-        if(scl == 1 and sda == 1) {
-            // nothing happened on the bus
-            goto common_init;
-        }
-        if(scl == 1 and sda == 0) {
-            // somebody else sent a start
-            goto wait_fall_l;
-        }
-    }
-    if(sym == SYM_START) {
-        goto wait_fall_l;        
-    }
-
+// Current state: scl = 1, sda = 0
+// Wait for scl to become low
 wait_fall_l:
-    if(scl == 1){
-        yield (1,0);
-        goto wait_fall_l;
-    }
-    if(scl == 0) {
-        goto read_symbol_in_trans;
-    }
+	if(scl == 0) {
+		sym = call(SYM_START);
+		goto read_symbol_in_trans;
+	}
+	if(scl == 1) {
+		yield (1,0);
+		goto wait_fall_l;
+	}
 
-wait_fall_h_sdal:
-    if(scl == 1 and sda == 0){
-        yield (1,1);
-        goto wait_fall_h_sdal;
-    }
-    if(scl == 1 and sda == 1){
-        goto common_init;
-    }
-    if(scl == 0){
-        goto read_symbol_in_trans;
-    }
-
-wait_fall_h_sdah:
-    if(scl == 1 and sda == 1){
-        // No change
-        yield (1,1);
-        goto wait_fall_h_sdah;
-    }
-    if(scl == 1 and sda == 0){
-        yield (1,1);
-        goto wait_fall_h_sdal;
-    }
-    if(scl == 0) {
-        goto read_symbol_in_trans;
-    }
-
+// Current state: scl = 0
 // Fetch symbol from upper layer while in transaction
 read_symbol_in_trans:
-    sym = SymbolMasterAgg(SYM_IDLE);
-    if(sym == SYM_START){
-        yield (1,1);
-        goto wait_rise_start;
-    }
-    if(sym == SYM_STOP){
-        yield (1,0);
-        goto wait_rise_stop;
-    }
-    if(sym == SYM_BIT0){
-        yield (1,0);
-        goto wait_rise_l;
-    }
-    if(sym == SYM_BIT1){
-        yield (1,1);
-        goto wait_rise_h;
-    }
-    if(sym == SYM_IDLE){
-        // Note, this is only valid for slaves, masters
-        // must push bits in transaction.
-        yield (1,1);
-        goto wait_rise_h;
-    }
-    if(sym == SYM_STRETCH) {
-        yield (0,sda);
-        goto read_symbol_in_trans;
-    }
+	if(sym == SYM_START){
+		goto rise_start;
+	}
+	if(sym == SYM_STOP){
+		goto rise_stop;
+	}
+	if(sym == SYM_BIT0){
+		goto rise_0;
+	}
+	if(sym == SYM_BIT1){
+		goto rise_1;
+	}
+	if(sym == SYM_STRETCH or sym == SYM_IDLE) {
+		yield (0,sda);
+		sym = call(SYM_STRETCH);
+		goto read_symbol_in_trans;
+	}
 
-wait_rise_start:
-    if(scl == 0) {
-        yield (1,1);
-        goto wait_rise_start;
-    }
-    if(scl == 1) {
-        yield (1,0);
-        goto wait_fall_l;
-    }
-    
-wait_rise_stop:
-    if(scl == 0) {
-        yield(1,0);
-        goto wait_rise_stop;
-    } 
-    if(scl == 1){ 
-        yield (1,1);
-        goto common_init;
-    }
+// Current state: scl = 0
+rise_start:
+	yield (1,1);
+	if (scl == 0) {
+		// Somebody is stretching
+		goto rise_start;
+	}
 
-wait_rise_h:
-    if(scl == 0) {
-        yield (1,1);
-        goto wait_rise_h;
-    }
-    if(scl == 1 and sda == 0) {
-        yield (1,1); 
-        goto wait_fall_h_sdal;
-    }
-    if(scl == 1 and sda == 1) {
-        goto wait_fall_h_sdah;
-    }
+// Current state: scl = 1, sda = 1
+// Send start symbol
+send_start:
+	yield (1,0);
+	yield (0,0);
+	sym = call(SYM_START);
+	yield (0,0);
+	goto read_symbol_in_trans;
 
-wait_rise_l:
-    if(scl == 0) {
-        yield(1,0);
-        goto wait_rise_l;
-    }
-    if(scl == 1) {
-        yield(1,0);
-        goto wait_fall_l;
-    }
-}
+// Current state: scl = 0
+rise_stop:
+	yield (1,0);
+	if(scl == 0) {
+		// Somebody is stretching
+		goto rise_stop;
+	}
+	yield (1,1);
+	sym = call(SYM_STOP);
+	if(sym == SYM_START) {
+		goto send_start;
+	} 
+	if(sym == SYM_IDLE) {
+		yield (1,1);
+		goto end;
+	}
+	assert(false);
 
-// Outputs SCL/SDA. SCL according to sym, SDA always 1
-// inputs SCL/SDA
-proc (int,int) SclDriver(int scl, int sda) {
-    int sym;
+// Current state: scl = 0
+rise_1:
+	yield (1,1);
+	if(scl == 0) {
+		// Somebody is stretching
+		goto rise_1;
+	}
+	yield (1,1);
+	assert(scl == 1);
+	if (scl == 1 and sda == 0) {
+		yield (0,1);
+		sym = call(SYM_BIT0);
+	}
+	if (scl == 1 and sda == 1) {
+		yield (0,1);
+		sym = call(SYM_BIT1);
+	}
+	yield (0,1);
+	goto read_symbol_in_trans;
 
-not_running:
-end:
-    sym = SymbolMasterAgg(SYM_IDLE);
-    if(sym == SYM_IDLE) {
-        yield (1,1);    
-        goto end;
-    }
-    if(sym == SYM_START) {
-        goto in_trans;
-    }
-    assert(false);
-
-in_trans:
-    yield (1,1); 
-    yield (1,1); 
-    yield (0,1); 
-low_decision:
-    sym = SymbolMasterAgg(SYM_IDLE);
-    yield (0,1); 
-    if(sym == SYM_STOP) {
-        goto stopping;
-    }
-    if(sym == SYM_STRETCH) {
-        goto low_decision;
-    }
-    assert(sym != SYM_IDLE);
-
-raise_clk:
-    yield (1,1);
-    if(scl == 0) {
-        // someone is stretching
-        goto raise_clk;
-    }
-    goto in_trans;
-
-stopping:
-    yield (1,1);
-    if(scl == 0){
-        // someone is stretching
-        goto stopping;
-    }
-    yield (1,1);
-    goto end;
-}
-
-proc (int,int) SymbolReader(int scl, int sda) {
-    int sym;
-
-    sym = SYM_IDLE;
-end:
-    if(scl == 1 and sda == 0) {
-        goto wait_start;
-    }
-    if(scl == 1 and sda == 1) {
-        sym = SymbolMasterAgg(SYM_IDLE);
-        yield (1,1);
-        goto end;
-    }
-    assert(false);
-
-wait_start:
-    yield (1,1);
-    if(scl == 0) {
-        sym = SymbolMasterAgg(SYM_START);
-        goto wait_l;
-    }
-    if(scl == 1 and sda == 0) {
-        goto wait_start;
-    }
-    assert(false);
-
-wait_l:
-    yield (1,1);
-    if(sym == SYM_STRETCH){
-	assert(scl == 0);
-	sym = SymbolMasterAgg(SYM_STRETCH);
-        goto wait_l;
-    }
-    if(scl == 0) {
-        goto wait_l;
-    }
-    if(scl==1 and sda == 1){
-        goto wait_1h;
-    }
-    if(scl==1 and sda == 0){
-        goto wait_0h;
-    }
-
-wait_0h:
-    yield (1,1);
-    if(scl == 1 and sda == 1) {
-        sym = SymbolMasterAgg(SYM_STOP);
-        if(sym == SYM_START) {
-            goto wait_start;
-        } 
-        if(sym == SYM_IDLE) {
-            yield (1,1);
-            goto end;
-        }
-        assert(false);
-    }
-    if(scl == 1 and sda == 0) {
-        goto wait_0h;
-    }
-    if(scl == 0) {
-        sym = SymbolMasterAgg(SYM_BIT0);
-        goto wait_l;
-    }
-
-wait_1h:
-    yield (1,1);
-    if(scl == 1 and sda == 1) {
-        goto wait_1h;
-    }
-    if(scl == 1 and sda == 0) {
-        goto wait_start;
-    }
-    if(scl == 0) {
-        sym = SymbolMasterAgg(SYM_BIT1);
-        goto wait_l;
-    }
-}
-
-proc (int,int) MasterDriver(int scl, int sda) {
-    int sda0;
-    int sda1;
-    int sda2;
-    int scl0;
-    int scl1;
-    int scl2;
-
-start:
-    (scl0, sda0) = SymbolReader(scl,sda);
-    (scl1, sda1) = SclDriver(scl,sda);
-    (scl2, sda2) = SdaDriver(scl,sda);
-    if(scl2 == 0) {
-        scl1 = 0;
-    }
-    if(sda2 == 0){
-        sda1 = 0;
-    }
-    yield (scl1,sda1);
-goto start;
+// Current state: scl = 0
+rise_0:
+	yield (1,0);
+	if(scl == 0) {
+		// Somebody is stretching
+		goto rise_0;
+	}
+	yield (1,0);
+	yield (0,0);
+	sym = call(SYM_BIT0);
+	yield (0,0);
+	goto read_symbol_in_trans;
 }
 
 
@@ -704,287 +512,298 @@ goto start;
 
 
 proc (int, int, intarr) EepSlave(int res, int addr, int res_data_len, intarr res_data) {
-    intarr buf;
-    int buf_i;
-    int res_pos;
+	intarr buf;
+	int buf_i;
+	int res_pos;
 
-    buf_i = 0;
-    while(buf_i < INTARR_LEN){
-        buf[buf_i] = 0;
-    }
-    
+	buf_i = 0;
+	while(buf_i < INTARR_LEN){
+		buf[buf_i] = 0;
+	}
+	
 start:
-    if(res == SE_RES_WRITE) {
-        goto write;
-    }
-    if(res == SE_RES_READ) {
-        goto read;
-    }
+	if(res == SE_RES_WRITE) {
+		goto write;
+	}
+	if(res == SE_RES_READ) {
+		goto read;
+	}
 
 write:  //Master wants to write to EEPROM
-    assert(addr + res_data_len < INTARR_LEN);    
-    res_pos = 0;
-    while(res_pos < res_data_len){
-        buf[addr + res_pos] = res_data[res_pos];
-    }     
-    yield (SE_ACT_OK, 0, buf);
+	assert(addr + res_data_len < INTARR_LEN);    
+	res_pos = 0;
+	while(res_pos < res_data_len){
+		buf[addr + res_pos] = res_data[res_pos];
+	}     
+	yield (SE_ACT_OK, 0, buf);
 
 goto start;
 
 read:  //Master wants to read from EEPROM
-    assert(addr + res_data_len < INTARR_LEN);    
-    res_pos = 0;
-    while(res_pos < res_data_len){
-        res_data[res_pos] = buf[addr + res_pos];
-    }     
+	assert(addr + res_data_len < INTARR_LEN);    
+	res_pos = 0;
+	while(res_pos < res_data_len){
+		res_data[res_pos] = buf[addr + res_pos];
+	}     
 
-    yield (SE_ACT_OK, res_data_len, buf);
+	yield (SE_ACT_OK, res_data_len, buf);
 goto start;
 }
 
 
-// TODO: Rename to EepDecoderSlave or so
-proc (int, int) HlSlave(int res, int res_data) {
-    int addr_buf;
+proc (int, int) HlResponder(int res, int res_data) {
+	int addr_buf;
 
-    intarr buf;
-    int buf_pos;
+	intarr buf;
+	int buf_pos;
 
-    int se_res;
-    intarr se_res_data;
-    int se_res_data_len;
+	int se_res;
+	intarr se_res_data;
+	int se_res_data_len;
 
-    assert(res == HLS_RES_IDLE);
-    yield (HLS_ACT_IDLE, 0);
+	assert(res == HLS_RES_IDLE);
+	yield (HLS_ACT_IDLE, 0);
 
 expect_start:
-    addr_buf = 0;
-    assert(res == HLS_RES_START);
-    yield (HLS_ACT_IDLE, 0);
-    
-    assert(res == HLS_RES_READ or res == HLS_RES_WRITE);
+	addr_buf = 0;
+	assert(res == HLS_RES_START);
+	yield (HLS_ACT_IDLE, 0);
+	
+	assert(res == HLS_RES_READ or res == HLS_RES_WRITE);
 
-    if(res == HLS_RES_READ) {
-        assert(false);
-    }
-    if(res == HLS_RES_WRITE) {
-        addr_buf = res_data;
-        yield (HLS_ACT_ACK,0);
-    }
-    if(res == HLS_RES_WRITE) {
-        addr_buf = (addr_buf << 8) | res_data;
-        yield (HLS_ACT_ACK,0);
-    }
+	if(res == HLS_RES_READ) {
+		assert(false);
+	}
+	if(res == HLS_RES_WRITE) {
+		addr_buf = res_data;
+		yield (HLS_ACT_ACK,0);
+	}
+	if(res == HLS_RES_WRITE) {
+		addr_buf = (addr_buf << 8) | res_data;
+		yield (HLS_ACT_ACK,0);
+	}
 data_trans:
-    if(res == HLS_RES_START) {
-        // Repeated start
-        yield (HLS_ACT_IDLE,0);
-    }
-    
-    // WRITE request, READ and ACK until STOP
-    if(res == HLS_RES_WRITE){
-        buf_pos = 0;
-        while(res == HLS_RES_WRITE){
-            buf[buf_pos] = res_data;
-            buf_pos = buf_pos + 1;
-            yield (HLS_ACT_ACK,0);
-        }
-        assert(res == HLS_RES_STOP);
-        (se_res, se_res_data_len, se_res_data) =
-             EepSlave(SE_RES_WRITE, addr_buf, buf_pos, buf); 
-        assert(se_res == SE_ACT_OK);
-        yield (HLS_ACT_IDLE,0);
-        goto expect_start;
-    }
+	if(res == HLS_RES_START) {
+		// Repeated start
+		yield (HLS_ACT_IDLE,0);
+	}
+	
+	// WRITE request, READ and ACK until STOP
+	if(res == HLS_RES_WRITE){
+		buf_pos = 0;
+		while(res == HLS_RES_WRITE){
+			buf[buf_pos] = res_data;
+			buf_pos = buf_pos + 1;
+			yield (HLS_ACT_ACK,0);
+		}
+		assert(res == HLS_RES_STOP);
+		(se_res, se_res_data_len, se_res_data) =
+			 call(SE_RES_WRITE, addr_buf, buf_pos, buf); 
+		assert(se_res == SE_ACT_OK);
+		yield (HLS_ACT_IDLE,0);
+		goto expect_start;
+	}
 
-    // READ request, WRITE until NACK, followed by STOP
-    if(res == HLS_RES_READ){
-        buf_pos = 0;
-        (se_res, se_res_data_len, buf) =
-             EepSlave(SE_RES_READ, addr_buf, 4, buf); 
+	// READ request, WRITE until NACK, followed by STOP
+	if(res == HLS_RES_READ){
+		buf_pos = 0;
+		(se_res, se_res_data_len, buf) =
+			 call(SE_RES_READ, addr_buf, 4, buf); 
 write_next:
-        assert(buf_pos < 4);
+		assert(buf_pos < 4);
 
-        yield (HLS_ACT_WRITE,buf[buf_pos]);
-        if(res == HLS_RES_READ) {
-            buf_pos = buf_pos + 1;
-            goto write_next;
-        }
-        assert(res == HLS_RES_STOP);
-        yield (HLS_ACT_IDLE,0);
-        goto expect_start;
-    }
+		yield (HLS_ACT_WRITE,buf[buf_pos]);
+		if(res == HLS_RES_READ) {
+			buf_pos = buf_pos + 1;
+			goto write_next;
+		}
+		assert(res == HLS_RES_STOP);
+		yield (HLS_ACT_IDLE,0);
+		goto expect_start;
+	}
 }
 
 /*
  * TransactionSlave does match on I2C address, and encapsulates ACKs/NACKs
  */
-proc (int, int) TransactionSlave(int res, int res_data) {
-    int act;
-    int act_data;
-    int read_request;
+proc (int, int) TrResponder<int resp_addr>(int res, int res_data) {
+	int act;
+	int act_data;
+	int read_request;
 
-    assert(res == BYTE_RES_IDLE);
-    (act, act_data) = HlSlave(HLS_RES_IDLE, 0);
-    yield (BYTE_ACT_IDLE, 0);
+	assert(res == BYTE_RES_IDLE);
+	(act, act_data) = call(HLS_RES_IDLE, 0);
+	yield (BYTE_ACT_IDLE, 0);
 
 start:
-    if(res == BYTE_RES_IDLE) {
-        yield (BYTE_ACT_IDLE, 0);
-        goto start;
-    }
-    if(res == BYTE_RES_STOP) {
-        (act,act_data) = HlSlave(HLS_RES_STOP, 0);
-        assert(act == HLS_ACT_IDLE);
-        yield (BYTE_ACT_IDLE, 0);
-        goto start;
-    }
-    assert(res == BYTE_RES_START);
-    if(res == BYTE_RES_START) {
-        (act,act_data) = HlSlave(HLS_RES_START, 0);
-        assert(act == HLS_ACT_IDLE);
-        yield (BYTE_ACT_READ, 0);
-    }
-    assert(res == BYTE_RES_READ);
-    if( (res_data >> 1) == SLAVE_ADDR ){
-        read_request = res_data & 1;
-        yield (BYTE_ACT_ACK,0);
-        assert(res == BYTE_RES_ACK);
-        if(read_request == 1) {
-            goto in_reading_trans;
-        } else {
-            goto in_writing_trans;
-        }
-    } else {
-        yield (BYTE_ACT_NACK,0);
-        goto start;
-    }
+	if(res == BYTE_RES_IDLE) {
+		yield (BYTE_ACT_IDLE, 0);
+		goto start;
+	}
+	if(res == BYTE_RES_STOP) {
+		(act,act_data) = call(HLS_RES_STOP, 0);
+		assert(act == HLS_ACT_IDLE);
+		yield (BYTE_ACT_IDLE, 0);
+		goto start;
+	}
+	assert(res == BYTE_RES_START);
+	if(res == BYTE_RES_START) {
+		(act,act_data) = call(HLS_RES_START, 0);
+		assert(act == HLS_ACT_IDLE);
+		yield (BYTE_ACT_READ, 0);
+	}
+	assert(res == BYTE_RES_READ);
+	if( (res_data >> 1) == resp_addr ){
+		read_request = res_data & 1;
+		yield (BYTE_ACT_ACK,0);
+		assert(res == BYTE_RES_ACK);
+		if(read_request == 1) {
+			goto in_reading_trans;
+		} else {
+			goto in_writing_trans;
+		}
+	} else {
+		yield (BYTE_ACT_NACK,0);
+		goto start;
+	}
 
 in_reading_trans:
-    (act,act_data) = HlSlave(HLS_RES_READ, 0);
-    if(act == HLS_ACT_WRITE) {
-        yield (BYTE_ACT_WRITE, act_data);
-        assert(res == BYTE_RES_ACK or res == BYTE_RES_NACK);
-        if(res == BYTE_RES_ACK) {
-            goto in_reading_trans;
-        } 
-        if(res == BYTE_RES_NACK)
-        {
-            yield (BYTE_ACT_IDLE, 0);
-            goto start;
-        }
-    }
-    goto in_reading_trans;
+	(act,act_data) = call(HLS_RES_READ, 0);
+	if(act == HLS_ACT_WRITE) {
+		yield (BYTE_ACT_WRITE, act_data);
+		assert(res == BYTE_RES_ACK or res == BYTE_RES_NACK);
+		if(res == BYTE_RES_ACK) {
+			goto in_reading_trans;
+		} 
+		if(res == BYTE_RES_NACK)
+		{
+			yield (BYTE_ACT_IDLE, 0);
+			goto start;
+		}
+	}
+	goto in_reading_trans;
 
 
 in_writing_trans:
-    yield (BYTE_ACT_READ, 0);
-    assert(res == BYTE_RES_READ or res == BYTE_RES_STOP or res == BYTE_RES_START);
-    if(res == BYTE_RES_READ){
-        (act,act_data) = HlSlave(HLS_RES_WRITE, res_data);
-        if(act == HLS_ACT_ACK) {
-            yield (BYTE_ACT_ACK,0);
-        }
-        if(act == HLS_ACT_NACK) {
-            yield (BYTE_ACT_NACK,0);
-            assert(res == BYTE_RES_NACK);
+	yield (BYTE_ACT_READ, 0);
+	assert(res == BYTE_RES_READ or res == BYTE_RES_STOP or res == BYTE_RES_START);
+	if(res == BYTE_RES_READ){
+		(act,act_data) = call(HLS_RES_WRITE, res_data);
+		if(act == HLS_ACT_ACK) {
+			yield (BYTE_ACT_ACK,0);
+		}
+		if(act == HLS_ACT_NACK) {
+			yield (BYTE_ACT_NACK,0);
+			assert(res == BYTE_RES_NACK);
 
-            yield (BYTE_ACT_IDLE,0);
-            assert(res == BYTE_RES_STOP);
+			yield (BYTE_ACT_IDLE,0);
+			assert(res == BYTE_RES_STOP);
 
-            (act,act_data) = HlSlave(HLS_RES_STOP, res_data);
-            assert(act == HLS_ACT_IDLE);
+			(act,act_data) = call(HLS_RES_STOP, res_data);
+			assert(act == HLS_ACT_IDLE);
 
-            yield (BYTE_ACT_IDLE, 0);
-            goto start;
-        }
-    }
-    if(res == BYTE_RES_STOP){
-        (act,act_data) = HlSlave(HLS_RES_STOP, res_data);
-        assert(act == HLS_ACT_IDLE);
-        yield (BYTE_ACT_IDLE, 0);
-        goto start;
-    }   
-    if(res == BYTE_RES_START){
-        goto start;
-    }
-    
-    goto in_writing_trans;
+			yield (BYTE_ACT_IDLE, 0);
+			goto start;
+		}
+	}
+	if(res == BYTE_RES_STOP){
+		(act,act_data) = call(HLS_RES_STOP, res_data);
+		assert(act == HLS_ACT_IDLE);
+		yield (BYTE_ACT_IDLE, 0);
+		goto start;
+	}   
+	if(res == BYTE_RES_START){
+		goto start;
+	}
+	
+	goto in_writing_trans;
 }
 
-// Aggregate the two calls from SymbolReaderSlave and SdaDriverSlave
-proc (int) SymbolSlaveAgg(int sym) {
-    int out_sym;
+proc (int,int) SymResponder(int scl, int sda) {
+    // Calls ByteSlave
+	int sym; // Symbol read from ByteSlave
+    int sda_send; // Output signal to be sent on SDA.
 
-start:
+	sym = SYM_IDLE;
 end:
-    out_sym = ByteSlave(sym);
+	if(scl == 1 and sda == 0) {
+		goto wait_start;
+	}
+	if(scl == 1 and sda == 1) {
+		sym = call(SYM_IDLE);
+		yield (1,1);
+		goto end;
+	}
+	assert(false);
 
-    yield out_sym;
-    yield out_sym;
-    goto start;
-}
+wait_start:
+	yield (1,1);
+	if(scl == 0) {
+		sym = call(SYM_START);
+		goto wait_l;
+	}
+	if(scl == 1 and sda == 0) {
+		goto wait_start;
+	}
+	assert(false);
 
-proc (int,int) SlaveDriver(int scl, int sda) {
-    int sda0;
-    int sda1;
-    int scl0;
-    int scl1;
+wait_l:
+	if(sym == SYM_STRETCH){
+        yield (0,1);
+        sym = call(SYM_STRETCH);
+        goto wait_l;
+	}
 
-start:
-end:
-    (scl0, sda0) = SymbolReaderSlave(scl,sda);
-    (scl1, sda1) = SdaDriverSlave(scl,sda);
-    yield (scl1,sda1);
-goto start;
-}
-
-// Copy over some master machines
-proccopy SdaDriverSlave of SdaDriver where SymbolMasterAgg = SymbolSlaveAgg;
-proccopy SymbolReaderSlave of SymbolReader where SymbolMasterAgg = SymbolSlaveAgg;
-proccopy ByteSlave of ByteMaster where TransactionMaster = TransactionSlave;
-
-/*******
- *
- * El Bus
- * Connect Machines at the electrical level
- *
- *******/
-
-proc () ElBus2() {
-    int scl;
-    int sda;
-    int scl1;
-    int sda1;
-    int scl2;
-    int sda2;
-
-    scl = 1; sda = 1;
-    
-start:
-end:
-    (scl1,sda1) = MasterDriver(scl,sda);
-    (scl2,sda2) = SlaveDriver(scl,sda);
-    if(scl1 == 0 or scl2 == 0) {
-        scl = 0;
+    if(sym == SYM_BIT0){
+        sda_send = 0;
     } else {
-        scl = 1;
+        sda_send = 1;
     }
-    if(sda1 == 0 or sda2 == 0) {
-        sda = 0;
-    } else {
-        sda = 1;
-    }
-    goto start;
+    yield (1,sda_send);
+
+	if(scl == 0) {
+		goto wait_l;
+	}
+	if(scl==1 and sda == 1){
+		goto wait_1h;
+	}
+	if(scl==1 and sda == 0){
+		goto wait_0h;
+	}
+
+wait_0h:
+	yield (1,sda_send);
+	if(scl == 1 and sda == 1) {
+        assert(sda_send == 1);
+		sym = call(SYM_STOP);
+		if(sym == SYM_START) {
+			goto wait_start;
+		} 
+		if(sym == SYM_IDLE) {
+			yield (1,1);
+			goto end;
+		}
+		assert(false);
+	}
+	if(scl == 1 and sda == 0) {
+		goto wait_0h;
+	}
+	if(scl == 0) {
+		sym = call(SYM_BIT0);
+		goto wait_l;
+	}
+
+wait_1h:
+	yield (1,sda_send);
+	if(scl == 1 and sda == 1) {
+		goto wait_1h;
+	}
+	if(scl == 1 and sda == 0) {
+		goto wait_start;
+	}
+	if(scl == 0) {
+		sym = call(SYM_BIT1);
+		goto wait_l;
+	}
 }
 
-proc () ElBus1() {
-    int scl;
-    int sda;
-
-    scl = 1; sda = 1;
-
-start:
-    (scl,sda) = MasterDriver(scl,sda);
-    goto start;
-}

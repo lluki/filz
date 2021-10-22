@@ -19,19 +19,17 @@
  - along with this program.  if not, see <https://www.gnu.org/licenses/>.                                          
  -}
 
-{-
- -
- -}
-
 module Parser (runFileParser) where
 
 import ParserAST
+import Utils
 
 import Control.Applicative hiding (many, some) 
 import Control.Monad
 import Data.Text (Text)
 import Data.Void
 import Data.Either
+import Data.Maybe
 import Text.Megaparsec hiding (State)
 import Text.Megaparsec.Char
 import Text.Megaparsec.Debug
@@ -61,7 +59,9 @@ lexeme = L.lexeme sc
 pProcName :: Parser String
 pProcName = lexeme ((:) <$> letterChar <*> many (char '_' <|> alphaNumChar) <?> "process identifier")
 pVarName = pProcName <?> "variable identifier"
+pDeviceName = pProcName <?> "device identifier"
 pLabelName = pProcName <?> "label identifiers"
+pLayerName = pProcName <?> "layer identifiers"
 
 -- Combinators
 commaSep p = p `sepBy` (symbol ",")
@@ -71,6 +71,7 @@ semiSep p = p `sepBy` (symbol ";")
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 braces = between (symbol "{") (symbol "}")
+anglebrackets = between (symbol "<") (symbol ">")
 
 tupleOrSingle :: Parser a -> Parser [a]
 tupleOrSingle a = 
@@ -263,9 +264,15 @@ pBlock = do
 -- proc (int) NAME(int a) {
 -- 
 -- }
+--
 
-parseProc :: Parser Proc
-parseProc = do
+pTemplParam :: Parser [VarDecl]
+pTemplParam = do
+    vs <- optional $ anglebrackets (commaSep pVarDecl)
+    return (fromMaybe [] vs)
+
+pProc :: Parser ParserProc
+pProc = do
     _ <- sc -- consumes extra whitespace. This is needed, because
             -- megaparsec consumes whitespace after the token, but 
             -- since this is the first parser invoked, we eager consume
@@ -274,14 +281,16 @@ parseProc = do
     _ <- symbol "proc"
     outParam <- parens (commaSep pDType)
     name <- pProcName
+    tmplParam <- pTemplParam
     inParam <- parens (commaSep pVarDecl)
     _ <- symbol "{"
     bodyState <- many (const <$> pVarDecl <*> (symbol ";")) 
     -- let bodyState = []
     bodyInstr <- many pInstr
     _ <- symbol "}"
-    return Proc {
+    return ParserProc {
         name = name,
+        tmplParam = tmplParam,
         outParam = outParam,
         inParam = inParam,
         state = bodyState,
@@ -295,32 +304,69 @@ pReplacement = do
     to <- pVarName
     return (from,to)
 
-parseProcCopy :: Parser ProcCopy
-parseProcCopy = 
+
+-- Some stuff inside the "system"
+
+pProcInst :: Parser ProcInst
+pProcInst =
+    let
+        pTmplParams = do
+            ps <- optional $ anglebrackets $ many $ lexeme L.decimal
+            return (fromMaybe [] ps)
+    in do
+        layerName <- pLayerName
+        symbol ":"
+        procName <- pProcName
+        procParams <- pTmplParams 
+        symbol ";"
+        return (ProcInst layerName procParams procName)
+
+pDevice :: Parser Device
+pDevice = 
     do
-    _ <- symbol "proccopy"
-    destName <- pVarName
-    _ <- symbol "of"
-    ofName <- pVarName
-    -- TODO handle "where"
-    rpl <- optional . try $ do  
-        symbol "where"
-        commaSep pReplacement
-    let rpl' = case rpl of
-                    (Just rs) -> rs
-                    Nothing -> []
+        _ <- symbol "device"
+        dev_name <- pDeviceName
+        _ <- symbol "{"
+        dev_insts <- many pProcInst
+        symbol "}"
+        symbol ";"
+        return (Device dev_name dev_insts)
 
-    _ <- symbol ";"
-    return (ProcCopy destName ofName rpl')
+pLayers :: Parser [String]
+pLayers = 
+    do
+        _ <- symbol "layers"
+        _ <- symbol "["
+        ls <- commaSep pVarName; 
+        _ <- symbol "]"
+        _ <- symbol ";"
+        return ls
 
-parseProcOrProcCopy :: Parser (Either Proc ProcCopy)
-parseProcOrProcCopy = 
-    (try $ Left <$> parseProc) <|> (Right <$> parseProcCopy)
+pSystem :: Parser System
+pSystem = do
+    _ <- symbol "system"
+    _ <- symbol "{"
+    layers <- pLayers    
+    devices <- many pDevice
+    _ <- symbol "}"
+    return (System layers devices)
+    
+    
+    
+
+-- Assemble the top level file elements: proc or system
+
+pProcOrSystem :: Parser (Either ParserProc System)
+pProcOrSystem = 
+    (try $ Left <$> pProc) <|> (Right <$> pSystem)
 
 parseFile :: Parser ParserFile
 parseFile = do
-    pps <- (many parseProcOrProcCopy) <* eof
-    return $ ParserFile (lefts pps) (rights pps)
+    pps <- (many pProcOrSystem) <* eof
+    if length (rights pps) == 0 then
+        fail "No system defined"
+    else 
+        return $ ParserFile (lefts pps) (head $ rights pps)
 
 runFileParser = runParser parseFile
 

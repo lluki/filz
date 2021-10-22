@@ -15,15 +15,16 @@
  - you should have received a copy of the gnu general public license                                               
  - along with this program.  if not, see <https://www.gnu.org/licenses/>.                                          
  -}
-
-
+import InstAST
 import ParserAST
-import CoreAST
-import CopyInstantiation
+
 import PromelaGen
 import CGen
 import Parser 
-import Checker
+import CheckerParse
+import CheckerInst
+import DevInstantiation
+import Utils
 
 import System.Environment
 import System.Exit
@@ -38,16 +39,14 @@ import qualified Data.Set as Set
 import Text.Megaparsec (errorBundlePretty)
 
 import Debug.Trace (trace)
+import Text.Pretty.Simple
+
 
 -- Command line flags
 data Flag 
     = CHeader | CDef | Promela
     | Input String | Output String | MachineFilter [String]
       deriving Show
-
-safeHead :: [a] -> Maybe a
-safeHead [] = Nothing
-safeHead (x:xs) = Just x
 
 parseParserFile :: FilePath -> IO ParserFile
 parseParserFile fp = do
@@ -56,27 +55,45 @@ parseParserFile fp = do
         Left s -> error (errorBundlePretty s)
         Right sys -> return sys
 
-parseFile :: FilePath -> IO File
-parseFile fp = do
-    sys <- parseParserFile fp
-    case (copyInstantiation sys) of
-        (Left err) -> ioError (userError err)
-        (Right fil) -> return fil
+-- This turns a function that returns a list of errors into a IO ()
+-- monad that errors when the function returns a non empty list (the
+-- list of errors)
+errlistToIO :: String -> (a -> [String]) -> a -> IO a
+errlistToIO prefix fn obj =
+    let errs = fn obj
+    in
+        if errs == [] then return obj
+        else ioError (userError $ prefix ++ intercalate ".\n"  errs)
+        
+
+checkParserFile' = errlistToIO "while checking parsed AST:\n" checkParserFile
+checkInstFile' = errlistToIO "while checking instantiated AST:\n" checkInstFile
+devInstantiate' = return . devInstantiate
+    
 
 
-check :: File -> IO File
-check f = do
-    case check_file f of
-        [] -> return f
-        errs -> error (unlines errs)
+showMeThis :: Show a => a -> IO a
+showMeThis x = do
+    pPrintNoColor x
+    return x
 
-parseAndCheck :: String -> IO File
-parseAndCheck infn = do
-    sys <- parseFile infn
-    sys' <- check sys
-    return sys'
+-- Run the "pipeline", parse, check parse, instantiate, check inst
+fileLoad :: String -> IO InstFile
+fileLoad infn = 
+    (parseParserFile infn) >>=
+    checkParserFile' >>=
+    devInstantiate' >>= -- showMeThis >>=
+    checkInstFile'
 
-
+applyMachineFilter :: [Flag] -> InstFile -> InstFile
+applyMachineFilter fs instf = 
+    let 
+        filt = maybe
+            (\x -> True) -- default if no flag is given
+            (\ms -> \m -> (InstAST.name m) `elem` ms)  -- ok we get a list ms of machine names to include
+            (getMachineFilter fs)
+    in
+        machineFilter filt instf
 
 -- Get optional flag (returns Nothing if not found)
 getOptFlag :: (Flag -> Maybe a) -> [Flag] -> Maybe a
@@ -88,7 +105,6 @@ getFlag fn err fs =
     case getOptFlag fn fs of
         Nothing -> ioError (userError err)
         Just s -> return s
-
 
 getInputFile :: [Flag] -> IO String
 getInputFile =
@@ -106,7 +122,15 @@ getOutputFile =
     in
         getFlag fn "need output file: -o FILE"
 
-getGenerator :: [Flag] -> IO (String, String -> File -> String)
+getMachineFilter :: [Flag] -> Maybe [String]
+getMachineFilter =
+    let
+        fn (MachineFilter ms) = Just ms
+        fn _ = Nothing
+    in 
+        getOptFlag fn
+
+getGenerator :: [Flag] -> IO (String, String -> InstFile -> String)
 getGenerator = 
     let
         fn CHeader = Just ("C Headers", generateCHdrs)
@@ -115,54 +139,18 @@ getGenerator =
         fn _ = Nothing
     in getFlag fn "Specify one of -H -C -P"
 
--- getFilter :: [Flag] -> (File -> File)
--- getFilter = 
---     let
---         fn (MachineFilter []) = Just id
---         fn (MachineFilter fs) = Just
---             (machineFilter (\x -> (name x) `elem` fs))
---         fn _ = Nothing
---     in
---         fromMaybe id . getOptFlag fn
-
-
-doFilterProc :: [String] -> File -> IO File
-doFilterProc desired (File act') =
-    let
-        act = map name act'
-        missing = Set.toList $
-            (Set.fromList desired) `Set.difference`  (Set.fromList act)
-    in 
-        if missing /= [] then
-            ioError $ userError ("Missing machines: " ++ intercalate "," missing)
-        else 
-            return $ machineFilter (\x -> (name x) `elem` desired) (File act')
-            
-
-doFilter :: [Flag] -> File -> IO File
-doFilter flags inf =
-    let
-        File act' = inf
-        -- act is [(Name, Proc)]
-        actNames = Set.fromList $ map name act'
-        act = map (\x -> (name x, x)) act'
-
-        fn (MachineFilter fs) = Just fs
-        fn _ = Nothing
-
-        filter = getOptFlag fn flags
-        (Just desired) = filter
-    in
-        if filter == Nothing then
-            return inf
-        else 
-            doFilterProc desired inf 
-    
-    
         
    
+-- String version of splitOn
+sSplitOn sep st = map unpack (splitOn (pack sep) (pack st))
+
 options :: [OptDescr Flag]
 options =
+    let
+        machf :: Maybe String -> Flag
+        machf Nothing = MachineFilter []
+        machf (Just s) = MachineFilter $ sSplitOn "," s
+    in         
     [ Option ['H']     ["header"] (NoArg CHeader)       "generate C header"
     , Option ['C']     ["c-definitions"]  (NoArg CDef)  "generate C definitions"
     , Option ['P']     ["promela"] (NoArg Promela)       "generate Promela"
@@ -171,12 +159,6 @@ options =
     , Option ['i']     ["input"]   (ReqArg Input  "FILE")  "input FILE"
     ]
 
--- String version of splitOn
-sSplitOn sep st = map unpack (splitOn (pack sep) (pack st))
-   
-machf :: Maybe String -> Flag
-machf Nothing = MachineFilter []
-machf (Just s) = MachineFilter $ sSplitOn "," s
 
 compilerOpts :: [String] -> IO ([Flag], [String])
 compilerOpts argv = 
@@ -194,13 +176,13 @@ main = do
     inf <- getInputFile flags
     outf <- getOutputFile flags
     let outfBase = last $ sSplitOn "/" outf
-    putStrLn "~~~ XP v 0.00001 ~~~ "
+    putStrLn "~~~ XP v 0.00002 ~~~ "
     putStrLn $ "Flags: " ++ (show flags)
-    putStr $ "Converting " ++ inf ++ " to " ++ outf ++ " "
-    sys <- parseAndCheck inf
     (genName, gen) <- getGenerator flags
-    putStrLn $ "as " ++ genName
-    sys' <- doFilter flags sys
+    putStrLn $ "Converting " ++ inf ++ " to " ++ outf ++ " as " ++ genName
+    -- Parse,check,instant
+    sys <- fileLoad inf
+    let sys' = applyMachineFilter flags sys
     writeFile outf (gen outfBase sys')
      
     

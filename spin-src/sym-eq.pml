@@ -1,20 +1,3 @@
-/*  filz - a model checked I2C specification 
- *  copyright (c) 2021, ETH Zurich, Systems Group
- *
- *  this program is free software: you can redistribute it and/or modify
- *  it under the terms of the gnu general public license as published by
- *  the free software foundation, either version 3 of the license, or
- *  (at your option) any later version.
- *
- *  this program is distributed in the hope that it will be useful,
- *  but without any warranty; without even the implied warranty of
- *  merchantability or fitness for a particular purpose.  see the
- *  gnu general public license for more details.
- *
- *  you should have received a copy of the gnu general public license
- *  along with this program.  if not, see <https://www.gnu.org/licenses/>.
- */
-
 /*
  * Shows the equivalence of Symbol+El and SymbolAbs
  */
@@ -23,6 +6,8 @@
     #error "Makes no sense with this ABS_LEVEL"
 #endif
 
+#include "common.xp"
+#include "eep.pml"
 #include "i2c-spec.pml"
 
 inline print_sym(in){
@@ -46,10 +31,10 @@ proctype verifier()
     chan abs_s_in = [0] of {int};
 
     /* concrete channels */
-    #define conc_m_out  ByteMaster_in
-    #define conc_m_in   ByteMaster_out
-    #define conc_s_out  ByteSlave_in
-    #define conc_s_in   ByteSlave_out
+    #define conc_m_out  controller_Byte_in
+    #define conc_m_in   controller_Byte_out
+    #define conc_s_out  responder_Byte_in 
+    #define conc_s_in   responder_Byte_out 
 
     /* upstream */
     chan byte_m_out = [0] of {int};
@@ -84,7 +69,7 @@ progress:
 }
 
 init { 
-    run SymbolRun();
+    SymbolRun();
     run verifier();
 }
 
